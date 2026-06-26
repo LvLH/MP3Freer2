@@ -1,20 +1,5 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-
-// 获取启用的API和代理URL（原逻辑是读取localStorage或者直接定义）
-function getEnabledApiEndpoints(): string[] {
-  try {
-    const customApi = localStorage.getItem('customApiEndpoint');
-    if (customApi) return [customApi.trim()];
-  } catch (e) {}
-  return ['https://music-api.gdstudio.xyz', 'https://api.xingzhige.com'];
-}
-
-function getProxyUrl(): string {
-  try {
-    return localStorage.getItem('proxyUrl') || '';
-  } catch (e) {}
-  return '';
-}
+import { getEnabledApiEndpoints, getProxyUrl } from '../settings';
 
 export interface OnlineSong {
   id: string;
@@ -74,7 +59,7 @@ async function postRequest(types: string, extraParams: Record<string, any>): Pro
       }
 
       let response;
-      if (endpoint.includes('glstudio.xyz')) {
+        if (endpoint.includes('gdstudio.xyz')) {
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -89,7 +74,7 @@ async function postRequest(types: string, extraParams: Record<string, any>): Pro
           clearTimeout(timeoutId);
         } catch (e: any) {
           if (e.name === 'AbortError' || String(e).includes('Failed to fetch') || String(e).includes('NetworkError')) {
-            throw new Error('网络连接超时或者被阻歭.\n\n[诊斝建议]\n此APY受飘防保掤，已切换为系统底层网络引搎，请确保您已开启了[C\t客户端](global)或 [TUN Mode]\n*(软件内的代理设置对此API无效)*');
+            throw new Error('网络连接超时或被阻止。\n\n[诊断建议]\n此API受防火墙保护，已切换为系统底层网络引擎，请确保您已开启了 [Clash 客户端](global) 或 [TUN Mode]\n*(软件内的代理设置对此API无效)*');
           }
           throw new Error('网络连接失败: ' + String(e));
         }
@@ -181,7 +166,7 @@ function mapPlaylist(item: any): OnlinePlaylist {
 
   return {
     id: String(item.id),
-    name: firstString(item.name, item.title, '未知| 歬卥名'),
+    name: firstString(item.name, item.title, '未知歌单名'),
     cover: resolveImageUrl(
       item.cover,
       item.coverImgUrl,

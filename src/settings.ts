@@ -9,6 +9,7 @@ export const ENABLED_API_ENDPOINTS_KEY = 'mp3freer_enabled_api_endpoints';
 
 export const API_ENDPOINTS = [
   'https://music-api.gdstudio.xyz',
+  'https://api.xingzhige.com',
 ];
 
 export const MUSIC_SOURCES: Array<{ id: MusicSource; name: string }> = [
