@@ -26,14 +26,23 @@
     {
       "identifier": "fs:scope",
       "allow": [
-        "**"
+        "$HOME/**",
+        "$DOWNLOAD/**",
+        "$MUSIC/**",
+        "$DESKTOP/**",
+        "$DOCUMENT/**"
       ]
     },
     {
       "identifier": "http:default",
       "allow": [
-        { "url": "http://**" },
-        { "url": "https://**" }
+        { "url": "https://music-api.gdstudio.xyz/**" },
+        { "url": "https://api.xingzhige.com/**" },
+        { "url": "http://music.163.com/**" },
+        { "url": "https://music.163.com/**" },
+        { "url": "http://p*.music.126.net/**" },
+        { "url": "https://p*.music.126.net/**" },
+        { "url": "https://images.unsplash.com/**" }
       ]
     }
   ]

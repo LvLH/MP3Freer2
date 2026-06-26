@@ -23,11 +23,26 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; img-src 'self' asset: https: data: http://music.163.com http://p*.music.126.net https://p*.music.126.net https://images.unsplash.com; media-src 'self' asset: https: http://music.163.com; connect-src 'self' https: http://music.163.com http://music.163.com; style-src 'self' 'unsafe-inline'; script-src 'self'",
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "**"
+          "$HOME/**",
+          "$DOWNLOAD/**",
+          "$MUSIC/**",
+          "$DESKTOP/**",
+          "$DOCUMENT/**",
+          "**/*.mp3",
+          "**/*.flac",
+          "**/*.wav",
+          "**/*.ogg",
+          "**/*.m4a",
+          "**/*.lrc",
+          "**/*.png",
+          "**/*.jpg",
+          "**/*.jpeg",
+          "**/*.svg",
+          "**/*.webp"
         ]
       }
     }
