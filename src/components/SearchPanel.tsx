@@ -1,0 +1,520 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp } from 'lucide-react';
+import { MusicApiService, OnlinePlaylist, OnlineSong, PlaylistDetail } from '../services/musicApi';
+import { Song, usePlayer, FavoriteArtist } from '../context/PlayerContext';
+import { getDefaultSearchSource, MUSIC_SOURCES } from '../settings';
+import { ArtistBanner } from './ArtistBanner';
+import { DiscoveryView } from './DiscoveryView';
+
+const FALLBACK_COVER = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300';
+const PAGE_SIZE = 30;
+
+const TEXT = {
+  unknown: '\u672a\u77e5',
+  unknownError: '\u672a\u77e5\u9519\u8bef',
+  unknownCreator: '\u672a\u77e5\u521b\u5efa\u8005',
+  search: '\u641c\u7d22',
+  searchPlaceholder: '\u641c\u7d22\u6b4c\u66f2\u3001\u6b4c\u5355\u6216\u6b4c\u624b...',
+  searchError: '\u641c\u7d22\u51fa\u9519\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u6216\u914d\u7f6e\u3002',
+  tracks: '\u5355\u66f2 / \u6b4c\u624b',
+  playlists: '\u7cbe\u54c1\u6b4c\u5355',
+  result: '\u641c\u7d22\u7ed3\u679c',
+  loadingPlaylist: '\u6b63\u5728\u8f7d\u5165\u5728\u7ebf\u6b4c\u5355\u8be6\u60c5...',
+  loadingMore: '\u6b63\u5728\u52a0\u8f7d\u66f4\u591a\u6b4c\u66f2...',
+  playlistLoadError: '\u6b4c\u5355\u8be6\u60c5\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002',
+  back: '\u8fd4\u56de',
+  playlistTag: '\u7f51\u6613\u4e91\u6b4c\u5355',
+  creator: '\u521b\u5efa\u8005',
+  playNow: '\u7acb\u5373\u64ad\u653e',
+  addQueue: '\u6dfb\u52a0\u5230\u64ad\u653e\u961f\u5217',
+};
+
+const formatCount = (count?: number) => {
+  if (!count) return '0';
+  if (count > 100000000) return (count / 100000000).toFixed(1) + '亿';
+  if (count > 10000) return (count / 10000).toFixed(1) + '万';
+  return count.toString();
+};
+
+export const SearchPanel: React.FC = () => {
+  const { playSong, addToPlaylist, playAll, addAllToPlaylist, isFavoritePlaylist, toggleFavoritePlaylist } = usePlayer();
+  const [keyword, setKeyword] = useState<string>('');
+  const [activeKeyword, setActiveKeyword] = useState<string>('');
+  const [searchType, setSearchType] = useState<'track' | 'playlist'>('track');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(false);
+  const [songResults, setSongResults] = useState<OnlineSong[]>([]);
+  const [playlistResults, setPlaylistResults] = useState<OnlinePlaylist[]>([]);
+  const [playlistPage, setPlaylistPage] = useState<number>(1);
+  const [playlistHasMore, setPlaylistHasMore] = useState<boolean>(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistDetail | null>(null);
+  const [detailPage, setDetailPage] = useState<number>(1);
+  const [playlistLoading, setPlaylistLoading] = useState<boolean>(false);
+  
+  const [matchedArtist, setMatchedArtist] = useState<FavoriteArtist | null>(null);
+  
+  const loadingMoreRef = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const handleFocusSearch = () => {
+      searchInputRef.current?.focus();
+    };
+    window.addEventListener('focusSearchInput', handleFocusSearch);
+    return () => {
+      window.removeEventListener('focusSearchInput', handleFocusSearch);
+    };
+  }, []);
+
+  const toPlayerSong = (onlineSong: OnlineSong): Song => ({
+    id: `online_${onlineSong.source}_${onlineSong.id}`,
+    originalId: onlineSong.id,
+    name: onlineSong.name,
+    artist: onlineSong.artist,
+    album: onlineSong.album,
+    url: onlineSong.url || null,
+    pic: onlineSong.pic || null,
+    duration: onlineSong.duration || 0,
+    isLocal: false,
+    source: onlineSong.source,
+    pic_id: onlineSong.pic_id,
+    lyric_id: onlineSong.lyric_id,
+  });
+
+  useEffect(() => {
+    const handleGlobalSearch = ((e: CustomEvent) => {
+      const term = e.detail;
+      if (!term) return;
+      setKeyword(term);
+      setSearchType('track');
+      setLoading(true);
+      setSelectedPlaylist(null);
+      setActiveKeyword(term);
+      setPage(1);
+      setHasMore(false);
+      setPlaylistPage(1);
+      setPlaylistHasMore(false);
+      setDetailPage(1);
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = 0;
+      }
+
+      const source = getDefaultSearchSource();
+      MusicApiService.searchSongs(term, source, 1)
+        .then((results: any) => {
+          setSongResults(results);
+          setPlaylistResults([]);
+          setHasMore(results.length >= PAGE_SIZE);
+        })
+        .catch((err: any) => {
+          console.error(err);
+          alert(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }) as EventListener;
+
+    const handleOpenPlaylist = ((e: CustomEvent) => {
+      const id = e.detail;
+      if (id) {
+        handlePlaylistClick(id, false);
+      }
+    }) as EventListener;
+
+    window.addEventListener('globalSearch', handleGlobalSearch);
+    window.addEventListener('openPlaylist', handleOpenPlaylist);
+    return () => {
+      window.removeEventListener('globalSearch', handleGlobalSearch);
+      window.removeEventListener('openPlaylist', handleOpenPlaylist);
+    };
+  }, []);
+
+
+  const sourceName = (source: string) => MUSIC_SOURCES.find(item => item.id === source)?.name || source;
+
+  const mergeSongs = (existing: OnlineSong[], incoming: OnlineSong[]) => {
+    const seen = new Set(existing.map(song => `${song.source}_${song.id}`));
+    const merged = [...existing];
+    for (const song of incoming) {
+      const key = `${song.source}_${song.id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(song);
+      }
+    }
+    return merged;
+  };
+
+  const searchTracks = async (term: string, targetPage: number, append: boolean) => {
+    const source = getDefaultSearchSource();
+    const [results, artistResult] = await Promise.all([
+      MusicApiService.searchSongs(term, source, targetPage),
+      !append ? MusicApiService.searchArtist(term) : Promise.resolve(null)
+    ]);
+    
+    if (!append) {
+      setMatchedArtist(artistResult);
+    }
+    
+    setSongResults(prev => append ? mergeSongs(prev, results) : results);
+    setPlaylistResults([]);
+    setPage(targetPage);
+    setHasMore(results.length >= PAGE_SIZE);
+  };
+
+  const searchPlaylistsPage = async (term: string, targetPage: number, append: boolean) => {
+    const results = await MusicApiService.searchPlaylists(term, targetPage);
+    setPlaylistResults(prev => append ? [...prev, ...results] : results);
+    setSongResults([]);
+    setPlaylistPage(targetPage);
+    setPlaylistHasMore(results.length >= 30);
+  };
+
+  const scrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const term = keyword.trim();
+    if (!term) return;
+
+    setLoading(true);
+    setSelectedPlaylist(null);
+    setActiveKeyword(term);
+    setPage(1);
+    setHasMore(false);
+    setPlaylistPage(1);
+    setPlaylistHasMore(false);
+    setDetailPage(1);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+
+    try {
+      if (searchType === 'track') {
+        await searchTracks(term, 1, false);
+      } else {
+        await searchPlaylistsPage(term, 1, false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadMoreTracks = async () => {
+    if (searchType !== 'track' || loading || loadingMoreRef.current || !hasMore || !activeKeyword) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      await searchTracks(activeKeyword, page + 1, true);
+    } catch (err) {
+      console.error(err);
+      setHasMore(false);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  const loadMorePlaylists = async () => {
+    if (searchType !== 'playlist' || loading || loadingMoreRef.current || !playlistHasMore || !activeKeyword) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      await searchPlaylistsPage(activeKeyword, playlistPage + 1, true);
+    } catch (err) {
+      console.error(err);
+      setPlaylistHasMore(false);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  const handleResultsScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (distanceToBottom < 160) {
+      if (selectedPlaylist) {
+        if (detailPage * PAGE_SIZE < selectedPlaylist.item.length) {
+          setDetailPage(prev => prev + 1);
+        }
+      } else {
+        if (searchType === 'track') void loadMoreTracks();
+        else if (searchType === 'playlist') void loadMorePlaylists();
+      }
+    }
+  };
+
+  const handlePlaylistClick = async (playlistId: string, isNeteaseDirect: boolean = false) => {
+    setPlaylistLoading(true);
+    try {
+      const details = await MusicApiService.getPlaylistDetails(playlistId, isNeteaseDirect);
+      setSelectedPlaylist(details);
+      setDetailPage(1);
+    } catch (err) {
+      console.error(err);
+      alert(`${TEXT.playlistLoadError}\n\n建议：如果一直失败，请尝试在“关于与设置”中配置代理，或者更换其他的第三方接口节点。`);
+    } finally {
+      setPlaylistLoading(false);
+    }
+  };
+
+
+  const formatSecs = (secs: number) => {
+    if (!secs) return '00:00';
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const renderSongList = (songs: OnlineSong[]) => (
+    <div className="song-list-container">
+      {songs.map((song, index) => (
+        <div
+          key={`${song.source}_${song.id}`}
+          className="song-row"
+          onDoubleClick={() => playSong(toPlayerSong(song))}
+        >
+          <div className="song-col-index">{(index + 1).toString().padStart(2, '0')}</div>
+          <div className="song-col-info">
+            <div className="song-title-row">
+              <span className="song-name">{song.name}</span>
+              {song.has_hires && <span className="tag-hires">Hi-Res</span>}
+              <span className="tag-source">{sourceName(song.source)}</span>
+            </div>
+            <span 
+              className="song-artist clickable-artist"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
+              }}
+              title={`搜索歌手: ${song.artist}`}
+            >
+              {song.artist}
+            </span>
+          </div>
+          <div className="song-col-album">{song.album}</div>
+          <div className="song-col-duration">{formatSecs(song.duration || 0)}</div>
+          <div className="song-row-actions">
+            <button className="song-row-action-btn" onClick={() => playSong(toPlayerSong(song))} title={TEXT.playNow}>
+              <Play size={14} fill="currentColor" />
+            </button>
+            <button className="song-row-action-btn" onClick={() => addToPlaylist(toPlayerSong(song))} title={TEXT.addQueue}>
+              <Plus size={14} />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="glass-card" style={{ flexShrink: 0 }}>
+        <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="search-bar-row" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button type="button" className="back-to-top-btn" onClick={scrollToTop} title="回到顶部" style={{ flexShrink: 0 }}>
+              <ArrowUp size={18} />
+            </button>
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="input-field"
+              placeholder={TEXT.searchPlaceholder}
+              value={keyword}
+              onChange={(e) => {
+                const val = e.target.value;
+                setKeyword(val);
+                if (!val.trim()) {
+                  setSongResults([]);
+                  setPlaylistResults([]);
+                  setSelectedPlaylist(null);
+                  setActiveKeyword('');
+                }
+              }}
+              style={{ height: 40 }}
+            />
+            <button type="submit" className="primary-btn" disabled={loading} style={{ height: 40, padding: '0 20px' }}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+              <span>{TEXT.search}</span>
+            </button>
+          </div>
+
+          <div className="type-selectors">
+            <label className={`type-radio ${searchType === 'track' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="searchType"
+                checked={searchType === 'track'}
+                onChange={() => setSearchType('track')}
+                style={{ display: 'none' }}
+              />
+              <span>{TEXT.tracks}</span>
+            </label>
+            <label className={`type-radio ${searchType === 'playlist' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="searchType"
+                checked={searchType === 'playlist'}
+                onChange={() => setSearchType('playlist')}
+                style={{ display: 'none' }}
+              />
+              <span>{TEXT.playlists}</span>
+            </label>
+          </div>
+        </form>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', marginTop: 24 }} onScroll={handleResultsScroll} ref={scrollContainerRef}>
+        {selectedPlaylist ? (
+          <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
+            <button className="back-btn" onClick={() => setSelectedPlaylist(null)} title={TEXT.back}>
+              <ArrowLeft size={16} />
+            </button>
+
+            <div className="detail-header">
+              <img src={selectedPlaylist.cover || FALLBACK_COVER} alt="cover" className="detail-cover" />
+              <div className="detail-info">
+                <span className="detail-tag">{TEXT.playlistTag}</span>
+                <h2 className="detail-title">{selectedPlaylist.name}</h2>
+                <span className="detail-author">{TEXT.creator} {selectedPlaylist.creatorName || TEXT.unknown}</span>
+                <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                  <button className="primary-btn" onClick={() => playAll(selectedPlaylist.item.map(toPlayerSong))} style={{ borderRadius: 20, padding: '8px 16px', height: 36 }}>
+                    <Play size={16} fill="currentColor" />
+                    <span>播放全部</span>
+                  </button>
+                  <button className="icon-btn" onClick={() => addAllToPlaylist(selectedPlaylist.item.map(toPlayerSong))} title="全部添加到队列" style={{ borderRadius: 20, padding: '8px 16px', height: 36, width: 'auto', gap: 6, background: 'rgba(255,255,255,0.05)' }}>
+                    <Plus size={16} />
+                    <span>添加全部</span>
+                  </button>
+                  <button 
+                    className="icon-btn" 
+                    onClick={() => toggleFavoritePlaylist({
+                      id: selectedPlaylist.id,
+                      name: selectedPlaylist.name,
+                      coverImgUrl: selectedPlaylist.cover || '',
+                      trackCount: selectedPlaylist.item.length,
+                      source: selectedPlaylist.item[0]?.source || 'netease',
+                      creatorName: selectedPlaylist.creatorName,
+                    })} 
+                    title={isFavoritePlaylist(selectedPlaylist.id) ? "取消收藏" : "收藏歌单"} 
+                    style={{ 
+                      borderRadius: 20, 
+                      padding: '8px 16px', 
+                      height: 36, 
+                      width: 'auto', 
+                      gap: 6, 
+                      background: 'rgba(255,255,255,0.05)', 
+                      color: isFavoritePlaylist(selectedPlaylist.id) ? '#ef4444' : undefined 
+                    }}
+                  >
+                    <Heart size={16} fill={isFavoritePlaylist(selectedPlaylist.id) ? 'currentColor' : 'none'} />
+                    <span>{isFavoritePlaylist(selectedPlaylist.id) ? "已收藏" : "收藏"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {renderSongList(selectedPlaylist.item.slice(0, detailPage * PAGE_SIZE))}
+            {detailPage * PAGE_SIZE < selectedPlaylist.item.length && (
+              <div className="list-loading-more">
+                <Loader2 size={16} className="animate-spin" />
+                <span>{TEXT.loadingMore}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {(songResults.length > 0 || playlistResults.length > 0) && (
+              <div className="glass-card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h3>{TEXT.result} {searchType === 'track' && `(${songResults.length}+)`}</h3>
+                  {searchType === 'track' && songResults.length > 0 && (
+                    <div style={{ display: 'flex', gap: 12 }}>
+                      <button className="primary-btn" onClick={() => playAll(songResults.map(toPlayerSong))} style={{ borderRadius: 20, padding: '0 16px', height: 32, fontSize: 13 }}>
+                        <Play size={14} fill="currentColor" />
+                        <span>播放全部</span>
+                      </button>
+                      <button className="icon-btn" onClick={() => addAllToPlaylist(songResults.map(toPlayerSong))} title="全部添加到队列" style={{ borderRadius: 20, padding: '0 16px', height: 32, width: 'auto', gap: 6, background: 'rgba(255,255,255,0.05)', fontSize: 13 }}>
+                        <Plus size={14} />
+                        <span>添加全部</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {playlistLoading && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, color: '#c084fc' }}>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>{TEXT.loadingPlaylist}</span>
+                  </div>
+                )}
+
+                {searchType === 'track' && songResults.length > 0 && (
+                  <>
+                    {matchedArtist && <ArtistBanner artist={matchedArtist} />}
+                    {renderSongList(songResults)}
+                    {loadingMore && (
+                      <div className="list-loading-more">
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>{TEXT.loadingMore}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {searchType === 'playlist' && playlistResults.length > 0 && (
+                  <>
+                    <div className="playlist-grid">
+                      {playlistResults.map(pl => (
+                        <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id, true)}>
+                          <div className="playlist-cover-wrapper">
+                            <img src={pl.cover || FALLBACK_COVER} alt="cover" className="playlist-card-cover" />
+                            <div className="playlist-stats">
+                              <div className="playlist-stat-item">
+                                <Play size={10} fill="currentColor" />
+                                <span>{formatCount(pl.playCount)}</span>
+                              </div>
+                              <div className="playlist-stat-item" style={{ marginLeft: 4 }}>
+                                <Music size={10} />
+                                <span>{pl.trackCount || pl.count || 0}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <span className="playlist-card-name" title={pl.name}>{pl.name}</span>
+                          <span className="playlist-card-author">{pl.creatorName || TEXT.unknownCreator}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {loadingMore && (
+                      <div className="list-loading-more">
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>正在加载更多歌单...</span>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            
+            {/* 探索发现模块 */}
+            {!keyword && songResults.length === 0 && playlistResults.length === 0 && (
+              <DiscoveryView />
+            )}
+            
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,40 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies & build output
+node_modules
+dist
+dist-ssr
+*.local
+
+# Python (临时调试脚本/缓存，禁止入库)
+*.py
+__pycache__/
+*.pyc
+
+# 测试/调试数据产物
+api_test_results.json
+netease_*.json
+netease_*.log
+playlist_detail_test.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njs*
+*.sln
+*.sw?
+
+# Rust / Tauri 构建产物
+src-tauri/target
+src-tauri/gen/schemas
