@@ -9,6 +9,7 @@ import { PlaylistPanel } from './components/PlaylistPanel';
 import { FavoritePanel } from './components/FavoritePanel';
 import { AboutPanel } from './components/AboutPanel';
 import { ShortcutHelpModal } from './components/ShortcutHelpModal';
+import { HistoryPanel } from './components/HistoryPanel';
 import { useShortcuts } from './hooks/useShortcuts';
 import './App.css';
 
@@ -53,6 +54,7 @@ function MainLayout() {
         <div style={{ display: activeTab === 'search' ? 'contents' : 'none' }}><SearchPanel /></div>
         <div style={{ display: activeTab === 'playlist' ? 'contents' : 'none' }}><PlaylistPanel /></div>
         <div style={{ display: activeTab === 'favorites' ? 'contents' : 'none' }}><FavoritePanel /></div>
+        <div style={{ display: activeTab === 'history' ? 'contents' : 'none' }}><HistoryPanel /></div>
         <div style={{ display: activeTab === 'about' ? 'contents' : 'none' }}><AboutPanel /></div>
       </main>
 

@@ -85,12 +85,24 @@ interface PlayerContextType {
   addAllToPlaylist: (songs: Song[]) => void;
   localDirectory: string | null;
   refreshLocalDirectory: () => Promise<void>;
+  /** 最近播放记录（最新在前，最多 200 条） */
+  playHistory: HistoryEntry[];
+  /** 最近 7 天播放次数最多的歌曲（最多 50 首） */
+  topPlayed: HistoryEntry[];
+  /** 清空播放历史 */
+  clearPlayHistory: () => void;
+}
+
+export interface HistoryEntry {
+  song: Song;
+  playedAt: number; // 时间戳 ms
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
 const LOCAL_SONGS_KEY = 'mp3freer_local_songs';
 const FAVORITE_SONGS_KEY = 'mp3freer_favorite_songs';
+const PLAY_HISTORY_KEY = 'mp3freer_play_history';
 
 export function parseLrc(lrcText: string): LyricLine[] {
   if (!lrcText) return [];
@@ -202,6 +214,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return [];
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [playHistory, setPlayHistory] = useState<HistoryEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('mp3freer_play_history');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentSongRef = useRef<Song | null>(null);
   const playModeRef = useRef<PlayMode>(playMode);
@@ -427,7 +446,52 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // 记录播放历史（去重：同一首歌 5 秒内不重复记录）
+  const lastRecordedRef = useRef<string>('');
+  const lastRecordedTimeRef = useRef<number>(0);
+
+  const recordPlay = (song: Song) => {
+    const now = Date.now();
+    // 同一首歌 5 秒内不重复记录
+    if (song.id === lastRecordedRef.current && now - lastRecordedTimeRef.current < 5000) return;
+    lastRecordedRef.current = song.id;
+    lastRecordedTimeRef.current = now;
+
+    setPlayHistory(prev => {
+      // 去重：移除旧的同 ID 记录，保留最新
+      const filtered = prev.filter(e => e.song.id !== song.id);
+      const updated = [{ song, playedAt: now }, ...filtered].slice(0, 200);
+      localStorage.setItem(PLAY_HISTORY_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // 本周最爱：最近 7 天播放次数 Top 50
+  const topPlayed = (() => {
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const recent = playHistory.filter(e => e.playedAt >= weekAgo);
+    const countMap = new Map<string, { entry: HistoryEntry; count: number }>();
+    for (const entry of recent) {
+      const existing = countMap.get(entry.song.id);
+      if (existing) {
+        existing.count++;
+      } else {
+        countMap.set(entry.song.id, { entry, count: 1 });
+      }
+    }
+    return Array.from(countMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 50)
+      .map(v => v.entry);
+  })();
+
+  const clearPlayHistory = () => {
+    setPlayHistory([]);
+    localStorage.removeItem(PLAY_HISTORY_KEY);
+  };
+
   const playSong = async (song: Song) => {
+    recordPlay(song);
     const idx = playlist.findIndex(s => s.id === song.id);
     if (idx >= 0) {
       if (idx === playIndex && currentSong?.id === song.id) {
@@ -853,6 +917,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       favoriteArtists,
       isFavoriteArtist,
       toggleFavoriteArtist,
+      playHistory,
+      topPlayed,
+      clearPlayHistory,
     }}>
       {children}
     </PlayerContext.Provider>

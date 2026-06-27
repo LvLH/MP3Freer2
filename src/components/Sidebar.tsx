@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard } from 'lucide-react';
+import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface SidebarProps {
@@ -12,6 +12,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'playlist', name: '正在播放', icon: ListMusic },
     { id: 'search', name: '在线音乐', icon: Search },
     { id: 'local', name: '本地歌曲', icon: Music },
+    { id: 'history', name: '最近播放', icon: History },
     { id: 'favorites', name: '我的收藏', icon: Heart },
     { id: 'about', name: '设置', icon: Settings },
   ];
