@@ -195,6 +195,12 @@ function mapPlaylist(item: any): OnlinePlaylist {
   };
 }
 
+export interface LyricData {
+  original: string;
+  translated: string;
+  romanized: string;
+}
+
 export const MusicApiService = {
   async searchArtist(keyword: string): Promise<any> {
     try {
@@ -346,7 +352,8 @@ export const MusicApiService = {
     }
   },
 
-  async getSongLyric(lyricId: string, source: string): Promise<string> {
+  async getSongLyric(lyricId: string, source: string): Promise<LyricData> {
+    const empty: LyricData = { original: '', translated: '', romanized: '' };
     try {
       if (source === 'netease') {
         try {
@@ -356,7 +363,11 @@ export const MusicApiService = {
           });
           if (response.ok) {
             const data = await response.json();
-            if (data?.lrc?.lyric) return data.lrc.lyric;
+            return {
+              original: data?.lrc?.lyric || '',
+              translated: data?.tlyric?.lyric || '',
+              romanized: data?.romalrc?.lyric || '',
+            };
           }
         } catch (e) {
           console.warn('Official getSongLyric failed', e);
@@ -364,10 +375,14 @@ export const MusicApiService = {
       }
 
       const data = await postRequest('lyric', { id: lyricId, source });
-      return data?.lyric || '';
+      return {
+        original: data?.lyric || '',
+        translated: data?.tlyric || '',
+        romanized: data?.roma || '',
+      };
     } catch (err) {
       console.error(`Get lyric error (ID: ${lyricId}, Source: ${source}):`, err);
-      return '';
+      return empty;
     }
   },
 

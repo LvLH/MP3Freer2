@@ -27,6 +27,10 @@ export interface Song {
 export interface LyricLine {
   time: number;
   text: string;
+  /** 翻译（如有） */
+  translation?: string;
+  /** 罗马音/拼音（如有） */
+  romanization?: string;
 }
 
 export interface FavoritePlaylist {
@@ -91,6 +95,15 @@ interface PlayerContextType {
   topPlayed: HistoryEntry[];
   /** 清空播放历史 */
   clearPlayHistory: () => void;
+  /** 当前歌词整体偏移（秒） */
+  lyricOffset: number;
+  /** 调整歌词偏移，delta 单位秒 */
+  adjustLyricOffset: (delta: number) => void;
+  /** 重置歌词偏移 */
+  resetLyricOffset: () => void;
+  /** 是否显示歌词翻译 */
+  showTranslation: boolean;
+  toggleShowTranslation: () => void;
 }
 
 export interface HistoryEntry {
@@ -126,6 +139,60 @@ export function parseLrc(lrcText: string): LyricLine[] {
   }
 
   return result.sort((a, b) => a.time - b.time);
+}
+
+/** 把单条 lrc 文本解析为 时间戳->文本 的映射（用于合并翻译） */
+function parseLrcMap(lrcText: string): Map<number, string> {
+  const map = new Map<number, string>();
+  if (!lrcText) return map;
+  const timeReg = /\[(\d{2}):(\d{2})(?:\.(\d{2,3}))?\]/g;
+  for (const line of lrcText.split('\n')) {
+    const text = line.replace(timeReg, '').trim();
+    if (!text) continue;
+    let match;
+    timeReg.lastIndex = 0;
+    while ((match = timeReg.exec(line)) !== null) {
+      const min = Number(match[1]);
+      const sec = Number(match[2]);
+      const ms = match[3] ? Number(match[3]) : 0;
+      const msFactor = match[3] && match[3].length === 2 ? 10 : 1;
+      map.set(min * 60 + sec + (ms * msFactor) / 1000, text);
+    }
+  }
+  return map;
+}
+
+/**
+ * 解析主歌词并合并翻译/罗马音。
+ * 翻译按时间戳匹配（容差 0.1 秒）。
+ * @param offset 整体时间偏移（秒），正值延后，负值提前
+ */
+export function parseLrcWithExtras(
+  original: string,
+  translated: string = '',
+  romanized: string = '',
+  offset: number = 0,
+): LyricLine[] {
+  const base = parseLrc(original);
+  if (base.length === 0) return base;
+
+  const transMap = parseLrcMap(translated);
+  const romaMap = parseLrcMap(romanized);
+
+  const findMatch = (map: Map<number, string>, time: number): string | undefined => {
+    // 容差 0.1 秒内匹配
+    for (const [t, txt] of map) {
+      if (Math.abs(t - time) < 0.15) return txt;
+    }
+    return undefined;
+  };
+
+  return base.map(line => ({
+    time: Math.max(0, line.time + offset),
+    text: line.text,
+    translation: findMatch(transMap, line.time),
+    romanization: findMatch(romaMap, line.time),
+  }));
 }
 
 function sanitizeFileName(fileName: string): string {
@@ -221,6 +288,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch {}
     return [];
   });
+  const [lyricOffset, setLyricOffset] = useState<number>(0);
+  const [showTranslation, setShowTranslation] = useState<boolean>(() => {
+    return localStorage.getItem('mp3freer_show_translation') !== 'false';
+  });
+  // 缓存当前歌曲的结构化歌词数据（原文+翻译+罗马音），供偏移/翻译切换时重建
+  const rawLyricDataRef = useRef<{ original: string; translated: string; romanized: string }>({ original: '', translated: '', romanized: '' });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentSongRef = useRef<Song | null>(null);
   const playModeRef = useRef<PlayMode>(playMode);
@@ -320,6 +393,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } else {
       setCurrentSong(null);
       setLyrics([]);
+      rawLyricDataRef.current = { original: '', translated: '', romanized: '' };
       setCurrentTime(0);
       setDuration(0);
     }
@@ -363,7 +437,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           playUrl = await MusicApiService.getSongUrl(apiId, song.source, getPreferredQuality());
         }
         if (!lyricText && song.lyric_id) {
-          lyricText = await MusicApiService.getSongLyric(song.lyric_id, song.source);
+          const lrcData = await MusicApiService.getSongLyric(song.lyric_id, song.source);
+          lyricText = lrcData.original;
+          rawLyricDataRef.current = { original: lrcData.original, translated: lrcData.translated, romanized: lrcData.romanized };
         }
         if (!picUrl && song.pic_id) {
           picUrl = await MusicApiService.getSongPic(song.pic_id, song.source);
@@ -393,7 +469,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           audio.removeEventListener('error', onCanPlayRef.current.error);
           onCanPlayRef.current = null;
         }
-        setLyrics(parseLrc(lyricText));
+        // 若仅是本地已缓存的纯文本歌词，ref 可能空，补一下
+        const raw = rawLyricDataRef.current.original ? rawLyricDataRef.current : { original: lyricText, translated: '', romanized: '' };
+        setLyrics(parseLrcWithExtras(raw.original, raw.translated, raw.romanized, lyricOffset));
         if (isPlaying) {
           audio.play().catch(err => {
             console.error('Playback start failed:', err);
@@ -488,6 +566,36 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const clearPlayHistory = () => {
     setPlayHistory([]);
     localStorage.removeItem(PLAY_HISTORY_KEY);
+  };
+
+  // 用当前缓存的原始歌词数据 + 给定偏移重建 lyrics
+  const rebuildLyrics = (offset: number) => {
+    const raw = rawLyricDataRef.current;
+    if (!raw.original) return;
+    setLyrics(parseLrcWithExtras(raw.original, raw.translated, raw.romanized, offset));
+  };
+
+  const adjustLyricOffset = (delta: number) => {
+    setLyricOffset(prev => {
+      // 限制在 ±10 秒内，步长 0.5 秒对齐
+      const next = Math.round((prev + delta) * 2) / 2;
+      const clamped = Math.max(-10, Math.min(10, next));
+      rebuildLyrics(clamped);
+      return clamped;
+    });
+  };
+
+  const resetLyricOffset = () => {
+    setLyricOffset(0);
+    rebuildLyrics(0);
+  };
+
+  const toggleShowTranslation = () => {
+    setShowTranslation(prev => {
+      const next = !prev;
+      localStorage.setItem('mp3freer_show_translation', String(next));
+      return next;
+    });
   };
 
   const playSong = async (song: Song) => {
@@ -709,7 +817,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         let lyricText = songToSave.lyric || '';
         if (!lyricText && songToSave.lyric_id) {
-          lyricText = await MusicApiService.getSongLyric(songToSave.lyric_id, songToSave.source);
+          lyricText = (await MusicApiService.getSongLyric(songToSave.lyric_id, songToSave.source)).original;
         }
         if (lyricText && !(await exists(lrcPath))) {
           await writeFile(lrcPath, new TextEncoder().encode(lyricText));
@@ -766,7 +874,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (!matched.lyric_id) return { lyricText: '', picUrl: fetchedPic };
 
-      const lyricText = await MusicApiService.getSongLyric(matched.lyric_id, matched.source);
+      const lyricText = (await MusicApiService.getSongLyric(matched.lyric_id, matched.source)).original;
       if (!lyricText) return { lyricText: '', picUrl: fetchedPic };
 
       await writeFile(sameNameLrcPath, new TextEncoder().encode(lyricText));
@@ -920,6 +1028,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       playHistory,
       topPlayed,
       clearPlayHistory,
+      lyricOffset,
+      adjustLyricOffset,
+      resetLyricOffset,
+      showTranslation,
+      toggleShowTranslation,
     }}>
       {children}
     </PlayerContext.Provider>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ListMusic, SkipBack, SkipForward } from 'lucide-react';
+import { ChevronDown, ListMusic, SkipBack, SkipForward, AlignLeft, AlignCenter, RotateCcw } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import defaultCoverIcon from '../assets/default-cover.png';
 
@@ -9,7 +9,13 @@ interface LyricViewProps {
 }
 
 export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
-  const { currentSong, isPlaying, lyrics, currentLyricIndex, seekTo, playlist, playIndex, playSong, togglePlay, prevSong, nextSong, currentTime, duration } = usePlayer();
+  const {
+    currentSong, isPlaying, lyrics, currentLyricIndex, seekTo,
+    playlist, playIndex, playSong, togglePlay, prevSong, nextSong,
+    currentTime, duration,
+    lyricOffset, adjustLyricOffset, resetLyricOffset,
+    showTranslation, toggleShowTranslation,
+  } = usePlayer();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -212,9 +218,47 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
                 onClick={() => seekTo(line.time)}
               >
                 {line.text}
+                {showTranslation && line.translation && (
+                  <div style={{ fontSize: 13, opacity: 0.7, marginTop: 4 }}>{line.translation}</div>
+                )}
+                {showTranslation && line.romanization && (
+                  <div style={{ fontSize: 12, opacity: 0.5, marginTop: 2, fontStyle: 'italic' }}>{line.romanization}</div>
+                )}
               </div>
             ))
           )}
+        </div>
+
+        {/* 歌词控制栏：偏移 ± / 翻译开关 / 重置 */}
+        <div style={{
+          position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', gap: 10, alignItems: 'center',
+          background: 'rgba(0,0,0,0.6)', borderRadius: 20, padding: '6px 16px',
+          backdropFilter: 'blur(10px)', zIndex: 10,
+        }}>
+          <button className="lyric-control-btn" onClick={() => adjustLyricOffset(-0.5)}
+            title="歌词提前 0.5s" style={{ width: 32, height: 32, fontSize: 14 }}>
+            -0.5s
+          </button>
+          <span style={{ fontSize: 12, color: lyricOffset !== 0 ? '#f59e0b' : 'var(--text-muted)', minWidth: 45, textAlign: 'center' }}>
+            {lyricOffset > 0 ? `+${lyricOffset}s` : lyricOffset < 0 ? `${lyricOffset}s` : '0s'}
+          </span>
+          <button className="lyric-control-btn" onClick={() => adjustLyricOffset(0.5)}
+            title="歌词延后 0.5s" style={{ width: 32, height: 32, fontSize: 14 }}>
+            +0.5s
+          </button>
+          {lyricOffset !== 0 && (
+            <button className="lyric-control-btn" onClick={resetLyricOffset}
+              title="重置偏移" style={{ width: 28, height: 28, padding: 0 }}>
+              <RotateCcw size={12} />
+            </button>
+          )}
+          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.15)', margin: '0 4px' }} />
+          <button className="lyric-control-btn" onClick={toggleShowTranslation}
+            title={showTranslation ? '隐藏翻译' : '显示翻译'}
+            style={{ width: 32, height: 32, padding: 0, opacity: showTranslation ? 1 : 0.5 }}>
+            {showTranslation ? <AlignLeft size={14} /> : <AlignCenter size={14} />}
+          </button>
         </div>
       </div>
     </div>
