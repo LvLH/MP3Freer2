@@ -25,4 +25,9 @@ serde_json = "1"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-http = { version = "2", features = ["dangerous-settings", "native-tls"], default-features = false }
+lofty = "0.21"
+reqwest = { version = "0.12", features = ["stream"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = "0.3"
 

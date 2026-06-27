@@ -2,10 +2,10 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists, readDir, readTextFile, writeFile } from '@tauri-apps/plugin-fs';
-import { fetch } from '@tauri-apps/plugin-http';
 import md5 from 'js-md5';
 import { MusicApiService } from '../services/musicApi';
 import { getDefaultSearchSource, getDownloadPath } from '../settings';
+import { readAudioMetadata, downloadFile } from '../services/rustBridge';
 
 export interface Song {
   id: string;
@@ -636,13 +636,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             return;
           }
 
-          const response = await fetch(songToSave.url);
-          if (!response.ok) {
-            alert(`歌曲下载失败，已收藏但未完成离线保存。服务器返回状态码：${response.status}`);
-            return;
-          }
-
-          await writeFile(filePath, new Uint8Array(await response.arrayBuffer()));
+          // 走 Rust 后端下载：不阻塞 UI 线程，且带进度回调
+          await downloadFile(songToSave.url, filePath, (percent) => {
+            console.log(`[下载] ${song.artist} - ${song.name}: ${percent.toFixed(0)}%`);
+          });
         }
 
         let lyricText = songToSave.lyric || '';
@@ -720,6 +717,47 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return data.lyricText;
   };
 
+  // 公共：从目录条目构建 Song，优先用 Rust 读取真实元数据，失败则 fallback 到文件名解析
+  const buildSongFromEntry = async (dir: string, name: string): Promise<Song | null> => {
+    const lowerName = name.toLowerCase();
+    const isAudio = ['.mp3', '.flac', '.wav', '.ogg', '.m4a'].some(ext => lowerName.endsWith(ext));
+    if (!isAudio) return null;
+
+    const localPath = joinPath(dir, name);
+    const id = `local_${(md5 as unknown as (value: string) => string)(localPath)}`;
+
+    let songName = '';
+    let artist = '';
+    let album = '本地导入';
+    let duration = 0;
+
+    try {
+      const meta = await readAudioMetadata(localPath);
+      // 有真实 tag 才覆盖，否则 fallback 到文件名
+      songName = meta.title || parseSongName(name).name;
+      artist = meta.artist || parseSongName(name).artist;
+      if (meta.album) album = meta.album;
+      duration = meta.durationSecs || 0;
+    } catch {
+      const fallback = parseSongName(name);
+      songName = fallback.name;
+      artist = fallback.artist;
+    }
+
+    return {
+      id,
+      name: songName,
+      artist,
+      album,
+      url: null,
+      pic: null,
+      duration,
+      isLocal: true,
+      localPath,
+      source: 'local',
+    };
+  };
+
   const importLocalDirectory = async () => {
     try {
       const selected = await openDialog({
@@ -735,25 +773,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       for (const entry of entries) {
         if (!entry.isFile) continue;
-
-        const lowerName = entry.name.toLowerCase();
-        const isAudio = ['.mp3', '.flac', '.wav', '.ogg', '.m4a'].some(ext => lowerName.endsWith(ext));
-        if (!isAudio) continue;
-
-        const localPath = joinPath(selected, entry.name);
-        const metadata = parseSongName(entry.name);
-        audioFiles.push({
-          id: `local_${(md5 as unknown as (value: string) => string)(localPath)}`,
-          name: metadata.name,
-          artist: metadata.artist,
-          album: '本地导入',
-          url: null,
-          pic: null,
-          duration: 0,
-          isLocal: true,
-          localPath,
-          source: 'local',
-        });
+        const song = await buildSongFromEntry(selected, entry.name);
+        if (song) audioFiles.push(song);
       }
 
       if (audioFiles.length > 0 || selected) {
@@ -781,25 +802,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       for (const entry of entries) {
         if (!entry.isFile) continue;
-
-        const lowerName = entry.name.toLowerCase();
-        const isAudio = ['.mp3', '.flac', '.wav', '.ogg', '.m4a'].some(ext => lowerName.endsWith(ext));
-        if (!isAudio) continue;
-
-        const localPath = joinPath(localDirectory, entry.name);
-        const metadata = parseSongName(entry.name);
-        audioFiles.push({
-          id: `local_${(md5 as unknown as (value: string) => string)(localPath)}`,
-          name: metadata.name,
-          artist: metadata.artist,
-          album: '本地导入',
-          url: null,
-          pic: null,
-          duration: 0,
-          isLocal: true,
-          localPath,
-          source: 'local',
-        });
+        const song = await buildSongFromEntry(localDirectory, entry.name);
+        if (song) audioFiles.push(song);
       }
 
       setLocalSongs(audioFiles);
