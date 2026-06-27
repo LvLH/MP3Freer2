@@ -1,11 +1,23 @@
 export type MusicSource = 'netease' | 'tencent' | 'kugou' | 'kuwo' | 'migu';
 
+/** 音质档位：标准 128 / 高品 320 / 无损 / Hi-Res */
+export type AudioQuality = 'standard' | 'high' | 'lossless' | 'hires';
+
+export const QUALITY_OPTIONS: Array<{ id: AudioQuality; name: string; br: string }> = [
+  { id: 'standard', name: '标准 128k', br: '128' },
+  { id: 'high', name: '高品 320k', br: '320' },
+  { id: 'lossless', name: '无损 FLAC', br: '999' },
+  { id: 'hires', name: 'Hi-Res', br: '1999' },
+];
+
 export const DEFAULT_DOWNLOAD_PATH = 'C:\\Users\\Public\\Downloads';
 export const DOWNLOAD_PATH_KEY = 'mp3freer_download_path';
 export const DEFAULT_SEARCH_SOURCE_KEY = 'mp3freer_default_search_source';
 export const DEFAULT_SEARCH_SOURCE: MusicSource = 'netease';
 export const PROXY_URL_KEY = 'mp3freer_proxy_url';
 export const ENABLED_API_ENDPOINTS_KEY = 'mp3freer_enabled_api_endpoints';
+export const PREFERRED_QUALITY_KEY = 'mp3freer_preferred_quality';
+export const DEFAULT_QUALITY: AudioQuality = 'high';
 
 export const API_ENDPOINTS = [
   'https://music-api.gdstudio.xyz',
@@ -77,4 +89,20 @@ export function getEnabledApiEndpoints(): string[] {
 
 export function setEnabledApiEndpoints(endpoints: string[]) {
   localStorage.setItem(ENABLED_API_ENDPOINTS_KEY, JSON.stringify(endpoints));
+}
+
+export function getPreferredQuality(): AudioQuality {
+  const saved = localStorage.getItem(PREFERRED_QUALITY_KEY);
+  if (QUALITY_OPTIONS.some(q => q.id === saved)) {
+    return saved as AudioQuality;
+  }
+  return DEFAULT_QUALITY;
+}
+
+export function setPreferredQuality(quality: AudioQuality) {
+  localStorage.setItem(PREFERRED_QUALITY_KEY, quality);
+}
+
+export function getQualityBr(quality: AudioQuality): string {
+  return QUALITY_OPTIONS.find(q => q.id === quality)?.br || '320';
 }

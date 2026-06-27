@@ -8,17 +8,22 @@ import {
   getDefaultSearchSource,
   getDownloadPath,
   getEnabledApiEndpoints,
+  getPreferredQuality,
   MUSIC_SOURCES,
   MusicSource,
+  QUALITY_OPTIONS,
+  AudioQuality,
   setDefaultSearchSource,
   setDownloadPath,
   setEnabledApiEndpoints,
+  setPreferredQuality,
 } from '../settings';
 
 export const AboutPanel: React.FC = () => {
   const [downloadPath, setDownloadPathState] = useState<string>('');
   const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const [enabledEndpoints, setEnabledEndpointsState] = useState<string[]>([]);
+  const [preferredQuality, setPreferredQualityState] = useState<AudioQuality>('high');
 
   useEffect(() => {
     const savedDownloadPath = getDownloadPath();
@@ -31,9 +36,14 @@ export const AboutPanel: React.FC = () => {
     setSearchSource(savedSource);
     setDefaultSearchSource(savedSource);
 
-
+    setPreferredQualityState(getPreferredQuality());
     setEnabledEndpointsState(getEnabledApiEndpoints());
   }, []);
+
+  const handleQualityChange = (quality: AudioQuality) => {
+    setPreferredQualityState(quality);
+    setPreferredQuality(quality);
+  };
 
   const handleClearCache = () => {
     if (confirm('确定要清空导入的本地音乐和收藏索引吗？该操作不会删除磁盘上的音乐文件。')) {
@@ -116,6 +126,27 @@ export const AboutPanel: React.FC = () => {
                     type="button"
                   >
                     {source.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="setting-row">
+            <div style={{ flex: 1 }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>播放音质</span>
+              <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
+                在线播放与下载时优先请求的音质档位。无损/Hi-Res 取决于歌曲本身是否拥有高品质源。
+              </p>
+              <div className="source-selectors" style={{ marginTop: 10 }}>
+                {QUALITY_OPTIONS.map(q => (
+                  <button
+                    key={q.id}
+                    className={`source-tab ${preferredQuality === q.id ? 'active' : ''}`}
+                    onClick={() => handleQualityChange(q.id)}
+                    type="button"
+                  >
+                    {q.name}
                   </button>
                 ))}
               </div>

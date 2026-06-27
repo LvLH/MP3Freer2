@@ -1,5 +1,5 @@
 import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-import { getEnabledApiEndpoints, getProxyUrl } from '../settings';
+import { getEnabledApiEndpoints, getProxyUrl, AudioQuality, getQualityBr } from '../settings';
 
 export interface OnlineSong {
   id: string;
@@ -313,11 +313,17 @@ export const MusicApiService = {
     }
   },
 
-  async getSongUrl(songId: string, source: string, br: string = '320'): Promise<string | null> {
+  async getSongUrl(songId: string, source: string, quality: AudioQuality | string = 'high'): Promise<string | null> {
+    // 兼容：若传入字符串档位 id（如 'high'）则映射；若直接是 br 数字字符串也接受
+    const br = typeof quality === 'string' && ['standard', 'high', 'lossless', 'hires'].includes(quality)
+      ? getQualityBr(quality as AudioQuality)
+      : String(quality);
     try {
       if (source === 'netease') {
         try {
-          const response = await tauriFetch(`http://music.163.com/api/song/enhance/player/url?id=${songId}&ids=[${songId}]&br=3200000`, {
+          // 无损/Hi-Res 走官方 enhance 接口请求高码率
+          const neteaseBr = br === '1999' || br === '999' ? '999000' : '3200000';
+          const response = await tauriFetch(`http://music.163.com/api/song/enhance/player/url?id=${songId}&ids=[${songId}]&br=${neteaseBr}`, {
             headers: { 'Referer': 'http://music.163.com' }
           });
           if (response.ok) {
@@ -329,14 +335,13 @@ export const MusicApiService = {
         }
       }
 
-      const data = await postRequest('url', { id: songId, source, br: String(br) });
+      const data = await postRequest('url', { id: songId, source, br });
       if (!data?.url) {
-        alert(`API返回的数据中没有URL。返回: ${JSON.stringify(data).substring(0, 100)}`);
+        console.warn('API返回的数据中没有URL。返回:', JSON.stringify(data).substring(0, 100));
       }
       return data?.url || null;
     } catch (err: any) {
       console.error(`Get song URL error (ID: ${songId}, Source: ${source}):`, err);
-      alert(`[调试信息] 请求播放链接出错: ${err.message || err}\n请截图该弹窗发给开发者`);
       return null;
     }
   },

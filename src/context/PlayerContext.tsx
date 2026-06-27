@@ -4,7 +4,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists, readDir, readTextFile, writeFile } from '@tauri-apps/plugin-fs';
 import md5 from 'js-md5';
 import { MusicApiService } from '../services/musicApi';
-import { getDefaultSearchSource, getDownloadPath } from '../settings';
+import { getDefaultSearchSource, getDownloadPath, getPreferredQuality } from '../settings';
 import { readAudioMetadata, downloadFile } from '../services/rustBridge';
 
 export interface Song {
@@ -340,7 +340,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } else {
         const apiId = song.originalId || song.id;
         if (!playUrl) {
-          playUrl = await MusicApiService.getSongUrl(apiId, song.source);
+          // 按用户偏好音质请求（lossless/hires 时尝试网易官方 enhance 接口）
+          playUrl = await MusicApiService.getSongUrl(apiId, song.source, getPreferredQuality());
         }
         if (!lyricText && song.lyric_id) {
           lyricText = await MusicApiService.getSongLyric(song.lyric_id, song.source);
