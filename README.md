@@ -4,10 +4,17 @@
 
 当前版本：`v26.7.17`
 
+<p align="center">
+  <a href="docs/screenshots/main.png" target="_blank">
+    <img src="docs/screenshots/main.png" alt="MP3Freer 主界面" width="860">
+  </a>
+</p>
+
 ---
 
 ## 目录
 
+- [应用截图](#应用截图)
 - [功能特性](#功能特性)
 - [技术栈](#技术栈)
 - [快速开始](#快速开始)
@@ -20,6 +27,22 @@
 - [开源协议](#开源协议)
 
 ---
+
+## 应用截图
+
+| 多平台搜索 | 五档音质 |
+| --- | --- |
+| <img src="docs/screenshots/search.png" alt="多平台搜索" width="420"> | <img src="docs/screenshots/settings.png" alt="音质与设置" width="420"> |
+
+| 全屏歌词 | 桌面歌词 |
+| --- | --- |
+| <img src="docs/screenshots/lyric-full.png" alt="全屏歌词" width="420"> | <img src="docs/screenshots/desktop-lyric.png" alt="桌面歌词" width="420"> |
+
+| 智能歌单 / 年度报告 |
+| --- |
+| <img src="docs/screenshots/smart-playlist.png" alt="智能歌单与年度报告" width="420"> |
+
+> 截图随版本更新可能略有差异；点击顶部大图可在新标签页中查看高清原图。
 
 ## 功能特性
 
