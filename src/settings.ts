@@ -1,5 +1,12 @@
 export type MusicSource = 'netease' | 'tencent' | 'kugou' | 'kuwo' | 'migu';
 
+/**
+ * 应用版本号（单一来源）。
+ * package.json / tauri.conf.json / Cargo.toml 必须与此保持一致。
+ * 显示时统一带 v 前缀。
+ */
+export const APP_VERSION = '26.7.17';
+
 /** 音质档位：标准 128 / 高品 320 / 无损 / Hi-Res */
 export type AudioQuality = 'standard' | 'high' | 'lossless' | 'hires';
 
@@ -71,13 +78,12 @@ export function getEnabledApiEndpoints(): string[] {
     try {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
-        // filter active endpoints that actually exist in API_ENDPOINTS list
-        // wait, the user said "默认全部勾选；这样以后有第三方链接也可以让你继续添加",
-        // so if there's a new one added to code, we might want to automatically enable it if we don't do strict check
-        // Or we just return the parsed array. Let's return parsed but only items that exist in API_ENDPOINTS,
-        // and also append new items from API_ENDPOINTS that aren't in `saved` yet?
-        // Actually, let's just return what's parsed, we trust the UI to manage it.
-        return parsed;
+        // 只保留是字符串且以 http 开头的合法 URL，过滤掉被污染或手改坏的值
+        const valid = parsed.filter(
+          (ep): ep is string => typeof ep === 'string' && /^https?:\/\//i.test(ep)
+        );
+        // 校验后回写，剔除脏数据；若全部非法则走默认
+        if (valid.length > 0) return valid;
       }
     } catch (e) {
       console.warn('Failed to parse enabled API endpoints', e);

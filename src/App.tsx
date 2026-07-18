@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { PlayerProvider } from './context/PlayerContext';
+import { ToastProvider } from './context/ToastContext';
 import { Sidebar } from './components/Sidebar';
 import { PlayerBar } from './components/PlayerBar';
 import { LyricView } from './components/LyricView';
@@ -10,6 +11,8 @@ import { FavoritePanel } from './components/FavoritePanel';
 import { AboutPanel } from './components/AboutPanel';
 import { ShortcutHelpModal } from './components/ShortcutHelpModal';
 import { HistoryPanel } from './components/HistoryPanel';
+import { YearlyReport } from './components/YearlyReport';
+import { SmartPlaylistsPanel } from './components/SmartPlaylistsPanel';
 import { useShortcuts } from './hooks/useShortcuts';
 import './App.css';
 
@@ -17,6 +20,7 @@ function MainLayout() {
   const [activeTab, setActiveTab] = useState<string>('local');
   const [isLyricOpen, setIsLyricOpen] = useState<boolean>(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState<boolean>(false);
+  const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
 
   useShortcuts({
     onTogglePlaylist: () => setActiveTab('playlist'),
@@ -47,11 +51,16 @@ function MainLayout() {
       <div className="aurora-bg aurora-1" />
       <div className="aurora-bg aurora-2" />
 
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenReport={() => setIsReportOpen(true)}
+      />
 
       <main className="main-content">
         <div style={{ display: activeTab === 'local' ? 'contents' : 'none' }}><LocalMusicPanel /></div>
-        <div style={{ display: activeTab === 'search' ? 'contents' : 'none' }}><SearchPanel /></div>
+        <div style={{ display: activeTab === 'search' ? 'contents' : 'none' }}><SearchPanel active={activeTab === 'search'} /></div>
+        <div style={{ display: activeTab === 'smart' ? 'contents' : 'none' }}><SmartPlaylistsPanel /></div>
         <div style={{ display: activeTab === 'playlist' ? 'contents' : 'none' }}><PlaylistPanel /></div>
         <div style={{ display: activeTab === 'favorites' ? 'contents' : 'none' }}><FavoritePanel /></div>
         <div style={{ display: activeTab === 'history' ? 'contents' : 'none' }}><HistoryPanel /></div>
@@ -60,10 +69,14 @@ function MainLayout() {
 
       <PlayerBar onToggleFullscreen={() => setIsLyricOpen(prev => !prev)} />
       <LyricView isOpen={isLyricOpen} onClose={() => setIsLyricOpen(false)} />
-      
-      <ShortcutHelpModal 
-        isOpen={isShortcutHelpOpen} 
-        onClose={() => setIsShortcutHelpOpen(false)} 
+
+      <ShortcutHelpModal
+        isOpen={isShortcutHelpOpen}
+        onClose={() => setIsShortcutHelpOpen(false)}
+      />
+      <YearlyReport
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
       />
     </div>
   );
@@ -71,9 +84,11 @@ function MainLayout() {
 
 function App() {
   return (
-    <PlayerProvider>
-      <MainLayout />
-    </PlayerProvider>
+    <ToastProvider>
+      <PlayerProvider>
+        <MainLayout />
+      </PlayerProvider>
+    </ToastProvider>
   );
 }
 

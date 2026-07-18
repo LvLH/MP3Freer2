@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Heart, Play, Plus, Music, ArrowUp } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { DEFAULT_COVER } from '../utils/defaultCover';
 
-const FALLBACK_COVER = 'assets/default-cover.png';
+const FALLBACK_COVER = DEFAULT_COVER;
 
 export const FavoritePanel: React.FC = () => {
   const { favoriteSongs, favoritePlaylists, favoriteArtists, playSong, addToPlaylist } = usePlayer();

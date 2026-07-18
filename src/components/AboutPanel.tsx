@@ -3,6 +3,7 @@ import { AlertCircle, Disc, FolderOpen, Trash2 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
   API_ENDPOINTS,
+  APP_VERSION,
   DEFAULT_DOWNLOAD_PATH,
   DOWNLOAD_PATH_KEY,
   getDefaultSearchSource,
@@ -103,7 +104,7 @@ export const AboutPanel: React.FC = () => {
         <div>
           <h2>MP3Freer 音乐播放器</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>
-            版本：v1.0.0 | 基于 Tauri v2 的本地与在线音乐播放器。
+            版本：v{APP_VERSION} | 基于 Tauri v2 的本地与在线音乐播放器。
           </p>
         </div>
       </div>

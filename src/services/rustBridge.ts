@@ -47,3 +47,11 @@ export async function downloadFile(
     onProgress: channel,
   });
 }
+
+/**
+ * 切换桌面悬浮歌词窗口的显示/隐藏
+ * @returns 切换后是否可见
+ */
+export async function toggleLyricOverlay(): Promise<boolean> {
+  return invoke<boolean>('toggle_lyric_overlay');
+}

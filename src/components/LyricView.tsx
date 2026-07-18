@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ListMusic, SkipBack, SkipForward, AlignLeft, AlignCenter, RotateCcw } from 'lucide-react';
+import { ChevronDown, ListMusic, SkipBack, SkipForward } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { usePlaybackProgress } from '../services/playbackProgress';
 import defaultCoverIcon from '../assets/default-cover.png';
 
 interface LyricViewProps {
@@ -10,12 +11,12 @@ interface LyricViewProps {
 
 export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
   const {
-    currentSong, isPlaying, lyrics, currentLyricIndex, seekTo,
+    currentSong, lyrics, currentLyricIndex, seekTo,
     playlist, playIndex, playSong, togglePlay, prevSong, nextSong,
-    currentTime, duration,
-    lyricOffset, adjustLyricOffset, resetLyricOffset,
-    showTranslation, toggleShowTranslation,
+    showTranslation,
   } = usePlayer();
+  // 播放进度/状态走独立 store，避免随 usePlayer 的其它字段一起重渲染
+  const { currentTime, duration, isPlaying } = usePlaybackProgress();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -54,31 +55,32 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
 
   // 当歌词行改变时，平滑滚动让当前行保持在容器中央
   useEffect(() => {
-    if (isOpen && containerRef.current && currentLyricIndex >= 0) {
-      const activeEl = containerRef.current.querySelector('.lyric-line.active') as HTMLElement;
-      if (activeEl) {
-        const container = containerRef.current;
-        const containerHeight = container.clientHeight;
-        const activeOffset = activeEl.offsetTop;
-        const activeHeight = activeEl.clientHeight;
-        
-        container.scrollTop = activeOffset - containerHeight / 2 + activeHeight / 2;
-      }
-    }
+    if (!isOpen || !containerRef.current || currentLyricIndex < 0) return;
+    // 用 rAF 确保在 DOM 更新（active class 切换）之后再滚动，
+    // 避免 querySelector 找到的是旧的 active 元素
+    const raf = requestAnimationFrame(() => {
+      const container = containerRef.current;
+      if (!container) return;
+      const activeEl = container.querySelector('.lyric-line.active') as HTMLElement;
+      if (!activeEl) return;
+      const targetTop = activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+      // scrollTo + behavior:smooth 比 scrollTop 直接赋值更可靠地触发平滑滚动
+      container.scrollTo({ top: targetTop, behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(raf);
   }, [currentLyricIndex, isOpen, lyrics]);
 
   // 当面板第一次打开时，也滚动到正确位置
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => {
-        if (containerRef.current && currentLyricIndex >= 0) {
-          const activeEl = containerRef.current.querySelector('.lyric-line.active') as HTMLElement;
-          if (activeEl) {
-            containerRef.current.scrollTop = activeEl.offsetTop - containerRef.current.clientHeight / 2 + activeEl.clientHeight / 2;
-          }
-        }
-      }, 300);
-    }
+    if (!isOpen) return;
+    const timer = setTimeout(() => {
+      if (!containerRef.current || currentLyricIndex < 0) return;
+      const activeEl = containerRef.current.querySelector('.lyric-line.active') as HTMLElement;
+      if (!activeEl) return;
+      const targetTop = activeEl.offsetTop - containerRef.current.clientHeight / 2 + activeEl.clientHeight / 2;
+      containerRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
+    }, 300);
+    return () => clearTimeout(timer);
   }, [isOpen]);
 
   const defaultCover = defaultCoverIcon;
@@ -229,37 +231,8 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
           )}
         </div>
 
-        {/* 歌词控制栏：偏移 ± / 翻译开关 / 重置 */}
-        <div style={{
-          position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
-          display: 'flex', gap: 10, alignItems: 'center',
-          background: 'rgba(0,0,0,0.6)', borderRadius: 20, padding: '6px 16px',
-          backdropFilter: 'blur(10px)', zIndex: 10,
-        }}>
-          <button className="lyric-control-btn" onClick={() => adjustLyricOffset(-0.5)}
-            title="歌词提前 0.5s" style={{ width: 32, height: 32, fontSize: 14 }}>
-            -0.5s
-          </button>
-          <span style={{ fontSize: 12, color: lyricOffset !== 0 ? '#f59e0b' : 'var(--text-muted)', minWidth: 45, textAlign: 'center' }}>
-            {lyricOffset > 0 ? `+${lyricOffset}s` : lyricOffset < 0 ? `${lyricOffset}s` : '0s'}
-          </span>
-          <button className="lyric-control-btn" onClick={() => adjustLyricOffset(0.5)}
-            title="歌词延后 0.5s" style={{ width: 32, height: 32, fontSize: 14 }}>
-            +0.5s
-          </button>
-          {lyricOffset !== 0 && (
-            <button className="lyric-control-btn" onClick={resetLyricOffset}
-              title="重置偏移" style={{ width: 28, height: 28, padding: 0 }}>
-              <RotateCcw size={12} />
-            </button>
-          )}
-          <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.15)', margin: '0 4px' }} />
-          <button className="lyric-control-btn" onClick={toggleShowTranslation}
-            title={showTranslation ? '隐藏翻译' : '显示翻译'}
-            style={{ width: 32, height: 32, padding: 0, opacity: showTranslation ? 1 : 0.5 }}>
-            {showTranslation ? <AlignLeft size={14} /> : <AlignCenter size={14} />}
-          </button>
-        </div>
+
+
       </div>
     </div>
   );

@@ -6,6 +6,8 @@ export interface OnlineSong {
   name: string;
   artist: string;
   album: string;
+  /** 所属专辑 id（网易接口带在 album.id 里，用于点专辑名进专辑详情；可能为空） */
+  albumId?: string;
   source: string;
   url_id: string;
   pic_id: string;
@@ -142,6 +144,9 @@ function mapOnlineSong(item: any, fallbackSource: string): OnlineSong {
     ? item.artist.join(', ')
     : firstString(item.artist, arNames, item.singer, '未知歌手');
   const album = firstString(item.album, item.al?.name, item.albumName, '未知专辑');
+  // 专辑 id：网易接口放在 album.id / al.id；第三方接口通常无，置空表示无法进专辑
+  const rawAlbumId = item.album?.id ?? item.al?.id ?? item.albumId ?? item.album_id ?? null;
+  const albumId = rawAlbumId != null ? String(rawAlbumId) : undefined;
   const duration = Number(item.extra_data?.duration || item.duration || (item.dt ? Math.floor(Number(item.dt) / 1000) : 0));
 
   return {
@@ -149,11 +154,12 @@ function mapOnlineSong(item: any, fallbackSource: string): OnlineSong {
     name: firstString(item.name, item.title, '未知歌曲'),
     artist,
     album,
+    albumId,
     source: firstString(item.source, fallbackSource),
     url_id: String(item.url_id || item.id),
     pic_id: String(item.pic_id || item.al?.pic || item.id || ''),
     lyric_id: String(item.lyric_id || item.id),
-    pic: resolveImageUrl(item.pic, item.picUrl, item.al?.picUrl, item.cover) || null,
+    pic: resolveImageUrl(item.pic, item.picUrl, item.al?.picUrl, item.album?.picUrl, item.cover) || null,
     url: firstString(item.url) || null,
     duration,
     has_hires: !!(item.extra_data?.has_hires || (item.sq?.br && item.sq.br > 320000)),
@@ -208,8 +214,7 @@ export const MusicApiService = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Referer': 'https://music.163.com',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'Referer': 'https://music.163.com'
         },
         body: `s=${encodeURIComponent(keyword)}&type=100&limit=1&offset=0`,
       });
@@ -486,15 +491,12 @@ export const MusicApiService = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       };
-      const proxyUrl = getProxyUrl();
-      if (proxyUrl) {
-        fetchOptions.proxy = { all: proxyUrl };
-      }
-
-      const response = await tauriFetch('http://music.163.com/api/toplist/detail', fetchOptions);
+      const response = await tauriFetch('https://music.163.com/api/toplist/detail', fetchOptions);
       if (!response.ok) return [];
       const data = await response.json();
-      if (data.code !== 200) return [];
+      if (data.code !== 200) {
+        throw new Error(`Netease Toplists API returned code: ${data.code}`);
+      }
 
       if (Array.isArray(data.list)) {
         return data.list.slice(0, 4).map((tl: any) => ({
@@ -511,8 +513,9 @@ export const MusicApiService = {
           })) : []
         }));
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to fetch Netease Toplists:', err);
+      throw err;
     }
     return [];
   },
@@ -526,15 +529,13 @@ export const MusicApiService = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       };
-      const proxyUrl = getProxyUrl();
-      if (proxyUrl) {
-        fetchOptions.proxy = { all: proxyUrl };
-      }
-
-      const response = await tauriFetch('http://music.163.com/api/playlist/highquality/list?limit=10', fetchOptions);
+      const response = await tauriFetch('https://music.163.com/api/playlist/highquality/list?limit=10', fetchOptions);
       if (!response.ok) return [];
       const data = await response.json();
-      if (data.code === 200 && Array.isArray(data.playlists)) {
+      if (data.code !== 200) {
+        throw new Error(`Netease HighQuality API returned code: ${data.code}`);
+      }
+      if (Array.isArray(data.playlists)) {
         return data.playlists.map((pl: any) => ({
           id: String(pl.id),
           name: pl.name,
@@ -545,8 +546,10 @@ export const MusicApiService = {
           trackCount: pl.trackCount
         }));
       }
-    } catch (err) {
+      return [];
+    } catch (err: any) {
       console.warn('Failed to fetch high quality playlists:', err);
+      throw err;
     }
     return [];
   },
@@ -579,15 +582,12 @@ export const MusicApiService = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       };
-      const proxyUrl = getProxyUrl();
-      if (proxyUrl) {
-        fetchOptions.proxy = { all: proxyUrl };
-      }
-
-      const response = await tauriFetch('http://music.163.com/api/personalized/newsong', fetchOptions);
+      const response = await tauriFetch('https://music.163.com/api/personalized/newsong', fetchOptions);
       if (!response.ok) return [];
       const data = await response.json();
-      if (data.code !== 200 || !Array.isArray(data.result)) return [];
+      if (data.code !== 200 || !Array.isArray(data.result)) {
+        throw new Error(`Netease NewSongs API returned code: ${data.code}`);
+      }
 
       return data.result.map((item: any) => {
         const song = item.song || {};
@@ -597,10 +597,11 @@ export const MusicApiService = {
           source: 'netease'
         }, 'netease');
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to get new songs:', err);
-      return [];
+      throw err;
     }
+    return [];
   },
 
   async getTopArtists(): Promise<any[]> {
@@ -614,15 +615,12 @@ export const MusicApiService = {
         },
         body: 'limit=12&offset=0&type=1&area=7'
       };
-      const proxyUrl = getProxyUrl();
-      if (proxyUrl) {
-        fetchOptions.proxy = { all: proxyUrl };
-      }
-
-      const response = await tauriFetch('http://music.163.com/api/artist/list', fetchOptions);
+      const response = await tauriFetch('https://music.163.com/api/artist/list', fetchOptions);
       if (!response.ok) return [];
       const data = await response.json();
-      if (data.code !== 200 || !Array.isArray(data.artists)) return [];
+      if (data.code !== 200 || !Array.isArray(data.artists)) {
+        throw new Error(`Netease Artists API returned code: ${data.code}`);
+      }
 
       return data.artists.map((artist: any) => ({
         id: String(artist.id),
@@ -630,9 +628,78 @@ export const MusicApiService = {
         picUrl: artist.picUrl || artist.img1v1Url || '',
         source: 'netease',
       }));
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to get top artists:', err);
-      return [];
+      throw err;
     }
+    return [];
+  },
+
+  /**
+   * 获取专辑详情（曲目列表）。
+   * 复用 PlaylistDetail 结构以便 SearchPanel 的详情页直接渲染。
+   * 仅网易源有免费官方接口；其它源返回 null。
+   */
+  async getAlbumDetail(albumId: string, source: string = 'netease'): Promise<PlaylistDetail | null> {
+    if (source !== 'netease' || !albumId) return null;
+    // 网易云专辑接口实测：未登录时 GET /api/album/{id} 返回 -462、GET /api/v1/album?id= 返回 404。
+    // 真正可用的是 POST /api/v1/album/{id}（客户端用的那个），以及第三方接口的 album 类型。
+    const attempts: Array<{ url: string; init?: any }> = [
+      { url: `http://music.163.com/api/v1/album/${albumId}`, init: { method: 'POST', headers: { 'Referer': 'http://music.163.com' } } },
+      { url: `http://music.163.com/api/album/${albumId}`, init: { method: 'POST', headers: { 'Referer': 'http://music.163.com' } } },
+    ];
+    // 第三方接口回退：部分的 GD/xingzhige 提供 playlist 查询，复用歌单接口拿专辑
+    const fallbackEndpoints = getEnabledApiEndpoints();
+    for (const ep of fallbackEndpoints) {
+      attempts.push({ url: `${ep}/api.php?types=playlist&id=${albumId}` });
+    }
+
+    for (const { url, init } of attempts) {
+      try {
+        const response = await tauriFetch(url, init || { headers: { 'Referer': 'http://music.163.com' } });
+        if (!response.ok) {
+          continue;
+        }
+        const data = await response.json();
+
+        // 网易官方返回：{ album, songs[] }
+        const album = data?.album;
+        const songs = Array.isArray(data?.songs) ? data.songs : [];
+        if (album && Array.isArray(data?.songs)) {
+          return {
+            id: String(album.id),
+            name: firstString(album.name, '未知专辑'),
+            cover: resolveImageUrl(album.picUrl, album.blurPicUrl) || '',
+            creatorName: firstString(album.artist?.name, '未知歌手'),
+            creatorAvatar: resolveImageUrl(album.artist?.picUrl, album.artist?.img1v1Url),
+            item: songs.map((song: any) => mapOnlineSong({ ...song, source: 'netease' }, 'netease')),
+          };
+        }
+
+        // 第三方接口回退：返回 { playlist: { tracks[] } } 或 { tracks[] }
+        const playlist = data?.playlist || data;
+        const tracks = Array.isArray(playlist?.tracks)
+          ? playlist.tracks
+          : Array.isArray(playlist?.item)
+            ? playlist.item
+            : [];
+        if (tracks.length > 0) {
+          const cover = resolveImageUrl(playlist?.coverImgUrl, playlist?.cover, playlist?.picUrl) || '';
+          return {
+            id: String(playlist?.id || albumId),
+            name: firstString(playlist?.name, playlist?.title, '未知专辑'),
+            cover,
+            creatorName: firstString(playlist?.creator?.nickname, playlist?.creator?.name, playlist?.creator, '未知歌手'),
+            creatorAvatar: resolveImageUrl(playlist?.creator?.avatarUrl, playlist?.creatorAvatar),
+            item: tracks.map((track: any) => mapOnlineSong({ ...track, source: 'netease' }, 'netease')),
+          };
+        }
+        continue;
+      } catch (err) {
+        console.warn(`Get album detail attempt failed (${url}):`, err);
+      }
+    }
+    console.error(`Get album detail error (ID: ${albumId}): all endpoints failed`);
+    return null;
   }
 };

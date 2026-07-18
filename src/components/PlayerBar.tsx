@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  Repeat, RefreshCw, Shuffle, Maximize2, Loader2, Heart
+  Repeat, RefreshCw, Shuffle, Maximize2, Loader2, Heart, MonitorSpeaker, Disc
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { usePlaybackProgress } from '../services/playbackProgress';
 import { triggerGlobalSearch } from '../utils/eventBus';
+import { toggleLyricOverlay } from '../services/rustBridge';
 
 interface PlayerBarProps {
   onToggleFullscreen: () => void;
@@ -13,10 +15,7 @@ interface PlayerBarProps {
 export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
   const {
     currentSong,
-    isPlaying,
     isLoading,
-    currentTime,
-    duration,
     volume,
     playMode,
     togglePlay,
@@ -28,6 +27,19 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
     toggleFavorite,
     isFavorite
   } = usePlayer();
+  // 播放进度/状态走独立 store，避免随 usePlayer 的其它字段一起重渲染
+  const { currentTime, duration, isPlaying } = usePlaybackProgress();
+
+  const [overlayOn, setOverlayOn] = useState<boolean>(false);
+
+  const handleToggleOverlay = async () => {
+    try {
+      const visible = await toggleLyricOverlay();
+      setOverlayOn(visible);
+    } catch (err) {
+      console.warn('切换桌面歌词失败:', err);
+    }
+  };
 
   const formatTime = (secs: number) => {
     if (isNaN(secs)) return '00:00';
@@ -72,21 +84,30 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
     }
   };
 
-  const defaultCover = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%23a855f7' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><circle cx='12' cy='12' r='3'/></svg>";
+  const [imageError, setImageError] = useState(false);
+
+  // 监听 currentSong 变化重置 imageError
+  useEffect(() => {
+    setImageError(false);
+  }, [currentSong]);
 
   return (
     <div className="player-bar">
       {/* 左侧：歌曲信息 */}
       <div className="player-left">
         <div className="player-cover-container" onClick={onToggleFullscreen} title="点击展开全屏歌词">
-          <img
-            src={currentSong?.pic || defaultCover}
-            alt="cover"
-            className={`player-cover ${isPlaying ? 'spinning' : ''}`}
-            onError={(e) => {
-              (e.target as HTMLImageElement).src = defaultCover;
-            }}
-          />
+          {(currentSong?.pic && !imageError) ? (
+            <img
+              src={currentSong.pic}
+              alt="cover"
+              className={`player-cover ${isPlaying ? 'spinning' : ''}`}
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className={`player-cover fallback-cover ${isPlaying ? 'spinning' : ''}`}>
+              <Disc size={24} color="var(--primary-color)" />
+            </div>
+          )}
         </div>
         <div className="player-info">
           <span className="player-title" title={currentSong?.name || '未在播放'}>
@@ -179,6 +200,15 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
           {playMode === 'single-loop' && <Repeat size={16} className="text-purple" />}
           {playMode === 'random' && <Shuffle size={16} />}
           {playMode === 'list-loop' && <RefreshCw size={16} />}
+        </button>
+
+        <button
+          className={`control-btn ${overlayOn ? 'favorited' : ''}`}
+          onClick={handleToggleOverlay}
+          title={overlayOn ? '关闭桌面歌词' : '开启桌面歌词'}
+          style={{ color: overlayOn ? '#a855f7' : undefined }}
+        >
+          <MonitorSpeaker size={16} />
         </button>
 
         <button className="control-btn" onClick={onToggleFullscreen} title="歌词面板">

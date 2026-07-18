@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp } from 'lucide-react';
 import { MusicApiService, OnlinePlaylist, OnlineSong, PlaylistDetail } from '../services/musicApi';
 import { Song, usePlayer, FavoriteArtist } from '../context/PlayerContext';
+import { useToast } from '../context/ToastContext';
 import { getDefaultSearchSource, MUSIC_SOURCES } from '../settings';
 import { ArtistBanner } from './ArtistBanner';
 import { DiscoveryView } from './DiscoveryView';
@@ -36,8 +37,9 @@ const formatCount = (count?: number) => {
   return count.toString();
 };
 
-export const SearchPanel: React.FC = () => {
+export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) => {
   const { playSong, addToPlaylist, playAll, addAllToPlaylist, isFavoritePlaylist, toggleFavoritePlaylist } = usePlayer();
+  const toast = useToast();
   const [keyword, setKeyword] = useState<string>('');
   const [activeKeyword, setActiveKeyword] = useState<string>('');
   const [searchType, setSearchType] = useState<'track' | 'playlist'>('track');
@@ -111,7 +113,7 @@ export const SearchPanel: React.FC = () => {
         })
         .catch((err: any) => {
           console.error(err);
-          alert(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
+          toast.error(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
         })
         .finally(() => {
           setLoading(false);
@@ -125,11 +127,21 @@ export const SearchPanel: React.FC = () => {
       }
     }) as EventListener;
 
+    // 点击歌曲行里的"专辑名"进入专辑详情，detail = { albumId, source }
+    const handleOpenAlbum = ((e: CustomEvent) => {
+      const detail = e.detail || {};
+      if (detail.albumId) {
+        handleAlbumClick(detail.albumId, detail.source || 'netease');
+      }
+    }) as EventListener;
+
     window.addEventListener('globalSearch', handleGlobalSearch);
     window.addEventListener('openPlaylist', handleOpenPlaylist);
+    window.addEventListener('openAlbum', handleOpenAlbum);
     return () => {
       window.removeEventListener('globalSearch', handleGlobalSearch);
       window.removeEventListener('openPlaylist', handleOpenPlaylist);
+      window.removeEventListener('openAlbum', handleOpenAlbum);
     };
   }, []);
 
@@ -203,7 +215,7 @@ export const SearchPanel: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
-      alert(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
+      toast.error(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
     } finally {
       setLoading(false);
     }
@@ -255,15 +267,43 @@ export const SearchPanel: React.FC = () => {
     }
   };
 
+  const openDetailScrollTop = () => {
+    // 进详情视图时把外层滚动容器滚回顶部，避免停留在点击的那一行位置
+    requestAnimationFrame(() => {
+      if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+    });
+  };
+
   const handlePlaylistClick = async (playlistId: string, isNeteaseDirect: boolean = false) => {
     setPlaylistLoading(true);
+    openDetailScrollTop();
     try {
       const details = await MusicApiService.getPlaylistDetails(playlistId, isNeteaseDirect);
       setSelectedPlaylist(details);
       setDetailPage(1);
     } catch (err) {
       console.error(err);
-      alert(`${TEXT.playlistLoadError}\n\n建议：如果一直失败，请尝试在“关于与设置”中配置代理，或者更换其他的第三方接口节点。`);
+      toast.error(`${TEXT.playlistLoadError}\n\n建议：如果一直失败，请尝试在“关于与设置”中配置代理，或者更换其他的第三方接口节点。`);
+    } finally {
+      setPlaylistLoading(false);
+    }
+  };
+
+  // 点击专辑名进入专辑详情：复用 selectedPlaylist 详情视图
+  const handleAlbumClick = async (albumId: string, source: string) => {
+    setPlaylistLoading(true);
+    openDetailScrollTop();
+    try {
+      const details = await MusicApiService.getAlbumDetail(albumId, source);
+      if (!details) {
+        toast.error('无法获取该专辑详情。\n\n该歌曲可能来自第三方接口，未提供专辑信息；或专辑已下架。');
+        return;
+      }
+      setSelectedPlaylist(details);
+      setDetailPage(1);
+    } catch (err) {
+      console.error(err);
+      toast.error(`${TEXT.playlistLoadError}\n\n可能是专辑接口异常，请稍后重试。`);
     } finally {
       setPlaylistLoading(false);
     }
@@ -303,7 +343,23 @@ export const SearchPanel: React.FC = () => {
               {song.artist}
             </span>
           </div>
-          <div className="song-col-album">{song.album}</div>
+          <div className="song-col-album">
+            {song.albumId ? (
+              <span
+                className="clickable-artist"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(new CustomEvent('openAlbum', { detail: { albumId: song.albumId, source: song.source } }));
+                }}
+                title={`查看专辑: ${song.album}`}
+                style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
+                {song.album}
+              </span>
+            ) : (
+              song.album
+            )}
+          </div>
           <div className="song-col-duration">{formatSecs(song.duration || 0)}</div>
           <div className="song-row-actions">
             <button className="song-row-action-btn" onClick={() => playSong(toPlayerSong(song))} title={TEXT.playNow}>
@@ -509,7 +565,7 @@ export const SearchPanel: React.FC = () => {
             
             {/* 探索发现模块 */}
             {!keyword && songResults.length === 0 && playlistResults.length === 0 && (
-              <DiscoveryView />
+              <DiscoveryView active={active} />
             )}
             
           </div>

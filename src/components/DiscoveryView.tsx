@@ -1,19 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MusicApiService, OnlinePlaylist, ToplistDetail, OnlineSong } from '../services/musicApi';
 import { usePlayer } from '../context/PlayerContext';
 import { Play, Music, Flame, Sparkles, Mic2 } from 'lucide-react';
+import { DEFAULT_COVER } from '../utils/defaultCover';
 
-const FALLBACK_COVER = 'assets/default-cover.png';
+const FALLBACK_COVER = DEFAULT_COVER;
 
-export const DiscoveryView: React.FC = () => {
+export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true }) => {
   const { playSong } = usePlayer();
   const [toplists, setToplists] = useState<ToplistDetail[]>([]);
   const [hqPlaylists, setHqPlaylists] = useState<OnlinePlaylist[]>([]);
   const [newSongs, setNewSongs] = useState<OnlineSong[]>([]);
   const [topArtists, setTopArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    // 仅在面板激活时拉取一次，避免 App 用 display:none 常驻挂载各面板时
+    // 未激活的 DiscoveryView 也发请求（4 个接口）。
+    if (!active || fetchedRef.current) return;
+    fetchedRef.current = true;
+
     const fetchDiscoveryData = async () => {
       setLoading(true);
       try {
@@ -30,15 +38,17 @@ export const DiscoveryView: React.FC = () => {
         setNewSongs((nSongs || []).slice(0, 10)); // Just show top 10 new songs
         setTopArtists((artists || []).slice(0, 12));
 
-      } catch (e) {
+      } catch (e: any) {
         console.error('Failed to fetch discovery data', e);
+        setErrorMsg(e?.message || String(e));
       } finally {
         setLoading(false);
       }
     };
 
     fetchDiscoveryData();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
 
   const handlePlaylistClick = (id: string) => {
     window.dispatchEvent(new CustomEvent('openPlaylist', { detail: id }));
@@ -204,6 +214,11 @@ export const DiscoveryView: React.FC = () => {
           <Sparkles size={48} strokeWidth={1} style={{ marginBottom: 16, color: 'var(--primary-color)' }} />
           <h3 style={{ margin: 0 }}>探索发现</h3>
           <p style={{ marginTop: 8, fontSize: 13 }}>暂未获取到推荐内容，请尝试搜索你想听的歌曲</p>
+          {errorMsg && (
+            <p style={{ marginTop: 16, fontSize: 12, color: '#ef4444', maxWidth: '80%', textAlign: 'center', wordBreak: 'break-all' }}>
+              Error Detail: {errorMsg}
+            </p>
+          )}
         </div>
       )}
 

@@ -38,3 +38,6 @@ playlist_detail_test.json
 # Rust / Tauri 构建产物
 src-tauri/target
 src-tauri/gen/schemas
+
+# 辅助工具本地缓存
+.workbuddy/

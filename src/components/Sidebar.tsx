@@ -1,16 +1,18 @@
 import React from 'react';
-import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History } from 'lucide-react';
+import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History, BarChart3, Sparkles } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  onOpenReport: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpenReport }) => {
   const menuItems = [
     { id: 'playlist', name: '正在播放', icon: ListMusic },
     { id: 'search', name: '在线音乐', icon: Search },
+    { id: 'smart', name: '智能歌单', icon: Sparkles },
     { id: 'local', name: '本地歌曲', icon: Music },
     { id: 'history', name: '最近播放', icon: History },
     { id: 'favorites', name: '我的收藏', icon: Heart },
@@ -77,6 +79,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       
       <div style={{ flex: 1 }} />
       <ul className="nav-menu" style={{ marginBottom: 16 }}>
+        <li
+          className="nav-item"
+          onClick={onOpenReport}
+          title="我的听歌年报"
+        >
+          <BarChart3 size={18} />
+          <span>听歌年报</span>
+        </li>
         <li
           className="nav-item"
           onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1' }))}
