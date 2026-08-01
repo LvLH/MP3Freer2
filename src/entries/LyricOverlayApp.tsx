@@ -120,6 +120,10 @@ export function LyricOverlayApp() {
       if (dragTriggeredRef.current) return;
       if (Math.abs(ev.screenX - startX) > 3 || Math.abs(ev.screenY - startY) > 3) {
         dragTriggeredRef.current = true;
+        // startDragging 后 OS 接管鼠标事件，onUp 不会触发，
+        // 必须在此处主动移除监听器，否则每次拖动后都会堆积一对 stale listener
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
         getCurrentWindow().startDragging().catch(console.error);
       }
     };
