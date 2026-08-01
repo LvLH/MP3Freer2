@@ -1,15 +1,69 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
     <title>MP3Freer</title>
+    <style>
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #0f0a1a;
+        color: #f8fafc;
+      }
+      #boot-status {
+        padding: 24px;
+        font-family: sans-serif;
+        font-size: 16px;
+        color: #94a3b8;
+      }
+      #boot-error {
+        display: none;
+        padding: 24px;
+        font-family: sans-serif;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #fca5a5;
+        background: #0f0a1a;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+    </style>
+    <script>
+      (function () {
+        var ua = navigator.userAgent || '';
+        if (/Android/i.test(ua)) {
+          document.documentElement.classList.add('is-android');
+        }
+        window.__mp3freerBootError = function (msg) {
+          var el = document.getElementById('boot-error');
+          var st = document.getElementById('boot-status');
+          if (st) st.style.display = 'none';
+          if (el) {
+            el.style.display = 'block';
+            el.textContent = '启动失败（请截图反馈）\n\n' + msg;
+          }
+        };
+        window.addEventListener('error', function (e) {
+          var msg = (e && e.message) ? e.message : String(e);
+          if (e && e.filename) msg += '\n' + e.filename + ':' + (e.lineno || '');
+          window.__mp3freerBootError(msg);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var reason = e && e.reason;
+          window.__mp3freerBootError(reason && reason.stack ? reason.stack : String(reason));
+        });
+      })();
+    </script>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-status">MP3Freer 正在启动…</div>
+    </div>
+    <div id="boot-error"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

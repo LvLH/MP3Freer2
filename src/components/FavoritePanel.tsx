@@ -1,9 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Heart, Play, Plus, Music, ArrowUp } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { DEFAULT_COVER } from '../utils/defaultCover';
-
-const FALLBACK_COVER = DEFAULT_COVER;
+import { CoverImage } from './CoverImage';
 
 export const FavoritePanel: React.FC = () => {
   const { favoriteSongs, favoritePlaylists, favoriteArtists, playSong, addToPlaylist } = usePlayer();
@@ -17,7 +15,9 @@ export const FavoritePanel: React.FC = () => {
   };
 
   const handlePlaylistClick = (id: string) => {
-    window.dispatchEvent(new CustomEvent('openPlaylist', { detail: id }));
+    window.dispatchEvent(new CustomEvent('openPlaylist', {
+      detail: { id, isNeteaseDirect: true, source: 'netease' },
+    }));
     window.dispatchEvent(new CustomEvent('globalSearch', { detail: '' }));
   };
 
@@ -164,7 +164,7 @@ export const FavoritePanel: React.FC = () => {
                       window.dispatchEvent(new CustomEvent('globalSearch', { detail: artist.name }));
                     }}>
                       <div className="playlist-cover-wrapper" style={{ borderRadius: '50%', overflow: 'hidden', aspectRatio: '1/1' }}>
-                        <img src={artist.picUrl || FALLBACK_COVER} alt="cover" className="playlist-card-cover" style={{ objectFit: 'cover', width: '100%', height: '100%' }} />
+                        <CoverImage src={artist.picUrl} alt="" className="playlist-card-cover" style={{ objectFit: 'cover', width: '100%', height: '100%' }} />
                       </div>
                       <span className="playlist-card-name" title={artist.name} style={{ textAlign: 'center', marginTop: 12 }}>{artist.name}</span>
                     </div>
@@ -196,7 +196,7 @@ export const FavoritePanel: React.FC = () => {
                   {favoritePlaylists.map(pl => (
                     <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id)}>
                       <div className="playlist-cover-wrapper">
-                        <img src={pl.coverImgUrl || FALLBACK_COVER} alt="cover" className="playlist-card-cover" />
+                        <CoverImage src={pl.coverImgUrl} alt="" className="playlist-card-cover" />
                         <div className="playlist-stats">
                           <div className="playlist-stat-item">
                             <Music size={10} />

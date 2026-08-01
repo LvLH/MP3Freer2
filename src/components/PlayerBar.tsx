@@ -7,6 +7,7 @@ import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
 import { triggerGlobalSearch } from '../utils/eventBus';
 import { toggleLyricOverlay } from '../services/rustBridge';
+import { isAndroid } from '../utils/platform';
 
 interface PlayerBarProps {
   onToggleFullscreen: () => void;
@@ -36,6 +37,10 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
     try {
       const visible = await toggleLyricOverlay();
       setOverlayOn(visible);
+      if (visible) {
+        // 立刻把当前句推给悬浮窗，不必等下一句歌词
+        window.dispatchEvent(new Event('desktop-lyric-sync'));
+      }
     } catch (err) {
       console.warn('切换桌面歌词失败:', err);
     }
@@ -98,9 +103,12 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
         <div className="player-cover-container" onClick={onToggleFullscreen} title="点击展开全屏歌词">
           {(currentSong?.pic && !imageError) ? (
             <img
-              src={currentSong.pic}
-              alt="cover"
+              src={currentSong.pic.startsWith('http://')
+                ? `https://${currentSong.pic.slice('http://'.length)}`
+                : currentSong.pic}
+              alt=""
               className={`player-cover ${isPlaying ? 'spinning' : ''}`}
+              referrerPolicy="no-referrer"
               onError={() => setImageError(true)}
             />
           ) : (
@@ -202,14 +210,17 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
           {playMode === 'list-loop' && <RefreshCw size={16} />}
         </button>
 
-        <button
-          className={`control-btn ${overlayOn ? 'favorited' : ''}`}
-          onClick={handleToggleOverlay}
-          title={overlayOn ? '关闭桌面歌词' : '开启桌面歌词'}
-          style={{ color: overlayOn ? '#a855f7' : undefined }}
-        >
-          <MonitorSpeaker size={16} />
-        </button>
+        {/* 桌面歌词第二窗仅 Windows/macOS；Android 车机改用应用内全屏歌词 */}
+        {!isAndroid() && (
+          <button
+            className={`control-btn ${overlayOn ? 'favorited' : ''}`}
+            onClick={handleToggleOverlay}
+            title={overlayOn ? '关闭桌面歌词' : '开启桌面歌词'}
+            style={{ color: overlayOn ? '#a855f7' : undefined }}
+          >
+            <MonitorSpeaker size={16} />
+          </button>
+        )}
 
         <button className="control-btn" onClick={onToggleFullscreen} title="歌词面板">
           <Maximize2 size={16} />

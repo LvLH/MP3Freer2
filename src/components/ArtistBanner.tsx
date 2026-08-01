@@ -2,6 +2,7 @@ import React from 'react';
 import { Heart } from 'lucide-react';
 import { FavoriteArtist } from '../context/PlayerContext';
 import { usePlayer } from '../context/PlayerContext';
+import { CoverImage } from './CoverImage';
 
 interface ArtistBannerProps {
   artist: FavoriteArtist;
@@ -21,8 +22,8 @@ export const ArtistBanner: React.FC<ArtistBannerProps> = ({ artist }) => {
       background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%)',
       borderLeft: '4px solid var(--primary)'
     }}>
-      <img 
-        src={artist.picUrl || 'assets/default-cover.png'} 
+      <CoverImage
+        src={artist.picUrl}
         alt={artist.name}
         style={{
           width: 80,

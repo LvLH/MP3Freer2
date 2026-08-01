@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
+#[cfg(desktop)]
+use tauri::{Emitter, Manager};
 use tauri::ipc::Channel;
 // lofty 0.21：properties/primary_tag/first_tag 是 trait 方法，必须显式引入
 // TaggedFileExt 提供 primary_tag/first_tag，AudioFile 提供 properties
@@ -133,27 +135,36 @@ pub async fn download_file(
 
 /// 切换桌面悬浮歌词窗口的显示/隐藏
 /// 返回切换后的可见状态（true=可见）
+/// Android / iOS 无第二窗口，直接返回 false。
 #[tauri::command]
 pub fn toggle_lyric_overlay(app: AppHandle) -> Result<bool, String> {
-    let overlay = app
-        .get_webview_window("lyric-overlay")
-        .ok_or_else(|| "桌面歌词窗口未找到".to_string())?;
+    #[cfg(mobile)]
+    {
+        let _ = app;
+        return Ok(false);
+    }
 
-    let now_visible = overlay.is_visible().unwrap_or(false);
-    if now_visible {
-        overlay
-            .hide()
-            .map_err(|e| format!("隐藏歌词窗口失败: {}", e))?;
-        Ok(false)
-    } else {
-        overlay
-            .show()
-            .map_err(|e| format!("显示歌词窗口失败: {}", e))?;
-        overlay
-            .set_focus()
-            .map_err(|e| format!("聚焦歌词窗口失败: {}", e))?;
-        // 通知副窗口当前状态
-        let _ = app.emit("overlay-visibility", true);
-        Ok(true)
+    #[cfg(desktop)]
+    {
+        let overlay = app
+            .get_webview_window("lyric-overlay")
+            .ok_or_else(|| "桌面歌词窗口未找到".to_string())?;
+
+        let now_visible = overlay.is_visible().unwrap_or(false);
+        if now_visible {
+            overlay
+                .hide()
+                .map_err(|e| format!("隐藏歌词窗口失败: {}", e))?;
+            Ok(false)
+        } else {
+            overlay
+                .show()
+                .map_err(|e| format!("显示歌词窗口失败: {}", e))?;
+            overlay
+                .set_focus()
+                .map_err(|e| format!("聚焦歌词窗口失败: {}", e))?;
+            let _ = app.emit("overlay-visibility", true);
+            Ok(true)
+        }
     }
 }

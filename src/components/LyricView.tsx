@@ -194,7 +194,10 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
                 <div 
                   key={`${song.id}_${i}`}
                   className={`lyric-playlist-item ${i === playIndex ? 'playing' : ''}`}
-                  onClick={() => playSong(song)}
+                  onClick={() => {
+                    void playSong(song);
+                    setIsPlaylistOpen(false);
+                  }}
                 >
                   <div className="song-name" style={{ color: i === playIndex ? 'var(--primary-hover)' : 'var(--text-main)' }}>{song.name}</div>
                   <div className="song-artist">- {song.artist}</div>

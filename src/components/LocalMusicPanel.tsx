@@ -86,8 +86,9 @@ export const LocalMusicPanel: React.FC = () => {
               {localSongs.map((song, index) => (
                 <div 
                   key={song.id} 
-                  className="song-row"
-                  onDoubleClick={() => playSong(song)}
+                  className="song-row song-row-playable"
+                  onClick={() => playSong(song)}
+                  title="点击播放"
                 >
                   <div className="song-col-index">{(index + 1).toString().padStart(2, '0')}</div>
                   <div className="song-col-info">

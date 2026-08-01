@@ -14,9 +14,16 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { YearlyReport } from './components/YearlyReport';
 import { SmartPlaylistsPanel } from './components/SmartPlaylistsPanel';
 import { useShortcuts } from './hooks/useShortcuts';
+import { isAndroid } from './utils/platform';
 import './App.css';
 
 function MainLayout() {
+  const panelDisplay = (tab: string, active: string) => {
+    if (active !== tab) return 'none' as const;
+    // 旧 WebView 对 display:contents 支持差，Android 用 block
+    return isAndroid() ? ('block' as const) : ('contents' as const);
+  };
+
   const [activeTab, setActiveTab] = useState<string>('local');
   const [isLyricOpen, setIsLyricOpen] = useState<boolean>(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState<boolean>(false);
@@ -58,13 +65,13 @@ function MainLayout() {
       />
 
       <main className="main-content">
-        <div style={{ display: activeTab === 'local' ? 'contents' : 'none' }}><LocalMusicPanel /></div>
-        <div style={{ display: activeTab === 'search' ? 'contents' : 'none' }}><SearchPanel active={activeTab === 'search'} /></div>
-        <div style={{ display: activeTab === 'smart' ? 'contents' : 'none' }}><SmartPlaylistsPanel /></div>
-        <div style={{ display: activeTab === 'playlist' ? 'contents' : 'none' }}><PlaylistPanel /></div>
-        <div style={{ display: activeTab === 'favorites' ? 'contents' : 'none' }}><FavoritePanel /></div>
-        <div style={{ display: activeTab === 'history' ? 'contents' : 'none' }}><HistoryPanel /></div>
-        <div style={{ display: activeTab === 'about' ? 'contents' : 'none' }}><AboutPanel /></div>
+        <div style={{ display: panelDisplay('local', activeTab), height: '100%' }}><LocalMusicPanel /></div>
+        <div style={{ display: panelDisplay('search', activeTab), height: '100%' }}><SearchPanel active={activeTab === 'search'} /></div>
+        <div style={{ display: panelDisplay('smart', activeTab), height: '100%' }}><SmartPlaylistsPanel /></div>
+        <div style={{ display: panelDisplay('playlist', activeTab), height: '100%' }}><PlaylistPanel /></div>
+        <div style={{ display: panelDisplay('favorites', activeTab), height: '100%' }}><FavoritePanel /></div>
+        <div style={{ display: panelDisplay('history', activeTab), height: '100%' }}><HistoryPanel /></div>
+        <div style={{ display: panelDisplay('about', activeTab), height: '100%' }}><AboutPanel /></div>
       </main>
 
       <PlayerBar onToggleFullscreen={() => setIsLyricOpen(prev => !prev)} />

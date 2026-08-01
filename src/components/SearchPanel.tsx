@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp } from 'lucide-react';
+import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp, X } from 'lucide-react';
 import { MusicApiService, OnlinePlaylist, OnlineSong, PlaylistDetail } from '../services/musicApi';
-import { Song, usePlayer, FavoriteArtist } from '../context/PlayerContext';
+import { usePlayer, FavoriteArtist } from '../context/PlayerContext';
 import { useToast } from '../context/ToastContext';
 import { getDefaultSearchSource, MUSIC_SOURCES } from '../settings';
+import { toPlayerSong } from '../utils/songUtils';
 import { ArtistBanner } from './ArtistBanner';
 import { DiscoveryView } from './DiscoveryView';
+import { CoverImage } from './CoverImage';
 
-const FALLBACK_COVER = 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300';
 const PAGE_SIZE = 30;
 
 const TEXT = {
@@ -71,21 +72,6 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     };
   }, []);
 
-  const toPlayerSong = (onlineSong: OnlineSong): Song => ({
-    id: `online_${onlineSong.source}_${onlineSong.id}`,
-    originalId: onlineSong.id,
-    name: onlineSong.name,
-    artist: onlineSong.artist,
-    album: onlineSong.album,
-    url: onlineSong.url || null,
-    pic: onlineSong.pic || null,
-    duration: onlineSong.duration || 0,
-    isLocal: false,
-    source: onlineSong.source,
-    pic_id: onlineSong.pic_id,
-    lyric_id: onlineSong.lyric_id,
-  });
-
   useEffect(() => {
     const handleGlobalSearch = ((e: CustomEvent) => {
       const term = e.detail;
@@ -121,9 +107,12 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     }) as EventListener;
 
     const handleOpenPlaylist = ((e: CustomEvent) => {
-      const id = e.detail;
+      const detail = e.detail;
+      const id = typeof detail === 'string' ? detail : detail?.id;
+      const isNeteaseDirect = typeof detail === 'object' && detail ? !!detail.isNeteaseDirect : false;
+      const source = typeof detail === 'object' && detail?.source ? String(detail.source) : undefined;
       if (id) {
-        handlePlaylistClick(id, false);
+        void handlePlaylistClick(id, isNeteaseDirect, source);
       }
     }) as EventListener;
 
@@ -131,7 +120,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     const handleOpenAlbum = ((e: CustomEvent) => {
       const detail = e.detail || {};
       if (detail.albumId) {
-        handleAlbumClick(detail.albumId, detail.source || 'netease');
+        void handleAlbumClick(detail.albumId, detail.source || 'netease');
       }
     }) as EventListener;
 
@@ -274,11 +263,19 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     });
   };
 
-  const handlePlaylistClick = async (playlistId: string, isNeteaseDirect: boolean = false) => {
+  const handlePlaylistClick = async (
+    playlistId: string,
+    isNeteaseDirect: boolean = false,
+    source?: string,
+  ) => {
     setPlaylistLoading(true);
     openDetailScrollTop();
     try {
-      const details = await MusicApiService.getPlaylistDetails(playlistId, isNeteaseDirect);
+      const details = await MusicApiService.getPlaylistDetails(
+        playlistId,
+        isNeteaseDirect,
+        source || getDefaultSearchSource(),
+      );
       setSelectedPlaylist(details);
       setDetailPage(1);
     } catch (err) {
@@ -322,8 +319,9 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
       {songs.map((song, index) => (
         <div
           key={`${song.source}_${song.id}`}
-          className="song-row"
-          onDoubleClick={() => playSong(toPlayerSong(song))}
+          className="song-row song-row-playable"
+          onClick={() => playSong(toPlayerSong(song))}
+          title="点击播放"
         >
           <div className="song-col-index">{(index + 1).toString().padStart(2, '0')}</div>
           <div className="song-col-info">
@@ -332,7 +330,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
               {song.has_hires && <span className="tag-hires">Hi-Res</span>}
               <span className="tag-source">{sourceName(song.source)}</span>
             </div>
-            <span 
+            <span
               className="song-artist clickable-artist"
               onClick={(e) => {
                 e.stopPropagation();
@@ -361,7 +359,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             )}
           </div>
           <div className="song-col-duration">{formatSecs(song.duration || 0)}</div>
-          <div className="song-row-actions">
+          <div className="song-row-actions" onClick={(e) => e.stopPropagation()}>
             <button className="song-row-action-btn" onClick={() => playSong(toPlayerSong(song))} title={TEXT.playNow}>
               <Play size={14} fill="currentColor" />
             </button>
@@ -382,24 +380,44 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             <button type="button" className="back-to-top-btn" onClick={scrollToTop} title="回到顶部" style={{ flexShrink: 0 }}>
               <ArrowUp size={18} />
             </button>
-            <input
-              ref={searchInputRef}
-              type="text"
-              className="input-field"
-              placeholder={TEXT.searchPlaceholder}
-              value={keyword}
-              onChange={(e) => {
-                const val = e.target.value;
-                setKeyword(val);
-                if (!val.trim()) {
-                  setSongResults([]);
-                  setPlaylistResults([]);
-                  setSelectedPlaylist(null);
-                  setActiveKeyword('');
-                }
-              }}
-              style={{ height: 40 }}
-            />
+            <div className="search-input-wrap">
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="input-field"
+                placeholder={TEXT.searchPlaceholder}
+                value={keyword}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setKeyword(val);
+                  if (!val.trim()) {
+                    setSongResults([]);
+                    setPlaylistResults([]);
+                    setSelectedPlaylist(null);
+                    setActiveKeyword('');
+                  }
+                }}
+                style={{ height: 40 }}
+              />
+              {keyword.length > 0 && (
+                <button
+                  type="button"
+                  className="search-clear-btn"
+                  title="清除"
+                  aria-label="清除搜索内容"
+                  onClick={() => {
+                    setKeyword('');
+                    setSongResults([]);
+                    setPlaylistResults([]);
+                    setSelectedPlaylist(null);
+                    setActiveKeyword('');
+                    searchInputRef.current?.focus();
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
             <button type="submit" className="primary-btn" disabled={loading} style={{ height: 40, padding: '0 20px' }}>
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
               <span>{TEXT.search}</span>
@@ -439,7 +457,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             </button>
 
             <div className="detail-header">
-              <img src={selectedPlaylist.cover || FALLBACK_COVER} alt="cover" className="detail-cover" />
+              <CoverImage src={selectedPlaylist.cover} alt="" className="detail-cover" />
               <div className="detail-info">
                 <span className="detail-tag">{TEXT.playlistTag}</span>
                 <h2 className="detail-title">{selectedPlaylist.name}</h2>
@@ -535,7 +553,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                       {playlistResults.map(pl => (
                         <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id, true)}>
                           <div className="playlist-cover-wrapper">
-                            <img src={pl.cover || FALLBACK_COVER} alt="cover" className="playlist-card-cover" />
+                            <CoverImage src={pl.cover} alt="" className="playlist-card-cover" />
                             <div className="playlist-stats">
                               <div className="playlist-stat-item">
                                 <Play size={10} fill="currentColor" />

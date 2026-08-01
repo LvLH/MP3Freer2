@@ -165,9 +165,8 @@ export function useShortcuts({
               p.prevSong();
               break;
             case 'stop':
-              // 暂停并回到开头
-              p.seekTo(0);
-              p.togglePlay();
+              // 暂停并回到开头（不要 toggle，已暂停时 toggle 会误开始播放）
+              p.stopPlayback();
               break;
             case 'volume-up':
               p.setVolumeLevel(Math.min(1, p.volume + 0.1));

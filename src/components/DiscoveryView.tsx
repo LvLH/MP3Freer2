@@ -1,57 +1,126 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MusicApiService, OnlinePlaylist, ToplistDetail, OnlineSong } from '../services/musicApi';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Music, Flame, Sparkles, Mic2 } from 'lucide-react';
-import { DEFAULT_COVER } from '../utils/defaultCover';
+import { Play, Music, Flame, Sparkles, Mic2, RefreshCw } from 'lucide-react';
+import { toPlayerSong } from '../utils/songUtils';
+import { CoverImage } from './CoverImage';
+/** 精品推荐每次展示条数 */
+const HQ_DISPLAY_COUNT = 10;
+/** 一次多拉一些，便于打乱/换一批 */
+const HQ_FETCH_LIMIT = 40;
+/** 发现页整体数据过期时间：再次进入时超过则重拉 */
+const DISCOVERY_TTL_MS = 15 * 60 * 1000;
+const HQ_CATS = ['全部', '华语', '流行', '电子', '轻音乐', '摇滚', '民谣', '说唱', '古风', '欧美'];
 
-const FALLBACK_COVER = DEFAULT_COVER;
+function shufflePick<T>(items: T[], count: number): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(count, copy.length));
+}
+
+function randomHqCat(): string {
+  return HQ_CATS[Math.floor(Math.random() * HQ_CATS.length)];
+}
 
 export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true }) => {
   const { playSong } = usePlayer();
   const [toplists, setToplists] = useState<ToplistDetail[]>([]);
   const [hqPlaylists, setHqPlaylists] = useState<OnlinePlaylist[]>([]);
+  const [hqPool, setHqPool] = useState<OnlinePlaylist[]>([]);
+  const [hqCat, setHqCat] = useState('全部');
+  const [hqRefreshing, setHqRefreshing] = useState(false);
   const [newSongs, setNewSongs] = useState<OnlineSong[]>([]);
   const [topArtists, setTopArtists] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const fetchedRef = useRef(false);
+  const lastFetchedAtRef = useRef(0);
+  const hqBeforeRef = useRef<number | undefined>(undefined);
+
+  const loadHighQuality = useCallback(async (mode: 'reshuffle' | 'refresh') => {
+    // 池子够大时先本地重抽，避免每次点「换一批」都打接口
+    if (mode === 'reshuffle' && hqPool.length > HQ_DISPLAY_COUNT) {
+      setHqPlaylists(shufflePick(hqPool, HQ_DISPLAY_COUNT));
+      return;
+    }
+
+    setHqRefreshing(true);
+    try {
+      const cat = randomHqCat();
+      const { playlists, lastUpdateTime } = await MusicApiService.getNeteaseHighQualityPlaylists({
+        limit: HQ_FETCH_LIMIT,
+        cat,
+        // 同分类翻页：池子不够时用游标再取一页
+        before: mode === 'refresh' ? undefined : hqBeforeRef.current,
+      });
+
+      let pool = playlists;
+      let usedCat = cat;
+      let usedBefore = lastUpdateTime;
+      if (pool.length === 0) {
+        usedCat = randomHqCat();
+        const retry = await MusicApiService.getNeteaseHighQualityPlaylists({
+          limit: HQ_FETCH_LIMIT,
+          cat: usedCat,
+        });
+        pool = retry.playlists;
+        usedBefore = retry.lastUpdateTime;
+      }
+
+      setHqCat(usedCat);
+      setHqPool(pool);
+      hqBeforeRef.current = usedBefore;
+      setHqPlaylists(shufflePick(pool, HQ_DISPLAY_COUNT));
+    } finally {
+      setHqRefreshing(false);
+    }
+  }, [hqPool]);
 
   useEffect(() => {
-    // 仅在面板激活时拉取一次，避免 App 用 display:none 常驻挂载各面板时
-    // 未激活的 DiscoveryView 也发请求（4 个接口）。
-    if (!active || fetchedRef.current) return;
+    // 面板激活时拉取；15 分钟内重复进入复用缓存，避免每次切换侧边栏都打 4 个接口
+    if (!active) return;
+    const stale = Date.now() - lastFetchedAtRef.current > DISCOVERY_TTL_MS;
+    if (fetchedRef.current && !stale) return;
     fetchedRef.current = true;
 
     const fetchDiscoveryData = async () => {
       setLoading(true);
       try {
-        // Fetch official toplists and high-quality playlists concurrently
-        const [tLists, hqLists, nSongs, artists] = await Promise.all([
+        const cat = randomHqCat();
+        const [tLists, hqResult, nSongs, artists] = await Promise.all([
           MusicApiService.getNeteaseToplists(),
-          MusicApiService.getNeteaseHighQualityPlaylists(),
+          MusicApiService.getNeteaseHighQualityPlaylists({ limit: HQ_FETCH_LIMIT, cat }),
           MusicApiService.getNewSongs(),
-          MusicApiService.getTopArtists()
+          MusicApiService.getTopArtists(),
         ]);
-        
-        setToplists(tLists || []);
-        setHqPlaylists(hqLists || []);
-        setNewSongs((nSongs || []).slice(0, 10)); // Just show top 10 new songs
-        setTopArtists((artists || []).slice(0, 12));
 
+        setToplists(tLists || []);
+        setHqCat(cat);
+        setHqPool(hqResult.playlists || []);
+        hqBeforeRef.current = hqResult.lastUpdateTime;
+        setHqPlaylists(shufflePick(hqResult.playlists || [], HQ_DISPLAY_COUNT));
+        setNewSongs((nSongs || []).slice(0, 10));
+        setTopArtists((artists || []).slice(0, 12));
+        lastFetchedAtRef.current = Date.now();
       } catch (e: any) {
         console.error('Failed to fetch discovery data', e);
         setErrorMsg(e?.message || String(e));
+        fetchedRef.current = false;
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDiscoveryData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void fetchDiscoveryData();
   }, [active]);
 
   const handlePlaylistClick = (id: string) => {
-    window.dispatchEvent(new CustomEvent('openPlaylist', { detail: id }));
+    window.dispatchEvent(new CustomEvent('openPlaylist', {
+      detail: { id, isNeteaseDirect: true, source: 'netease' },
+    }));
   };
 
   const formatCount = (count?: number) => {
@@ -62,10 +131,7 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
   };
 
   const handlePlaySong = (onlineSong: OnlineSong) => {
-    playSong({
-      ...onlineSong,
-      isLocal: false,
-    });
+    void playSong(toPlayerSong(onlineSong));
   };
 
   if (loading) {
@@ -95,18 +161,41 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 36, padding: '20px 0', animation: 'fadeIn 0.5s ease' }}>
       
-      {/* 精品歌单 */}
+      {/* 精品歌单：多拉一批 + 打乱展示；可换一批 */}
       {hqPlaylists.length > 0 && (
         <section>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <Sparkles size={20} style={{ color: 'var(--primary-color)' }} />
             <h2 style={{ fontSize: 18, margin: 0 }}>精品推荐</h2>
+            {hqCat && hqCat !== '全部' && (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{hqCat}</span>
+            )}
+            <button
+              className="icon-btn"
+              onClick={() => void loadHighQuality(hqPool.length > HQ_DISPLAY_COUNT ? 'reshuffle' : 'refresh')}
+              disabled={hqRefreshing}
+              title="换一批精品歌单"
+              style={{
+                marginLeft: 'auto',
+                width: 'auto',
+                height: 28,
+                padding: '0 10px',
+                gap: 6,
+                borderRadius: 14,
+                background: 'rgba(255,255,255,0.05)',
+                fontSize: 12,
+                opacity: hqRefreshing ? 0.6 : 1,
+              }}
+            >
+              <RefreshCw size={13} className={hqRefreshing ? 'animate-spin' : undefined} />
+              <span>换一批</span>
+            </button>
           </div>
           <div className="playlist-grid">
             {hqPlaylists.map(pl => (
               <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id)}>
                 <div className="playlist-cover-wrapper">
-                  <img src={pl.cover || FALLBACK_COVER} alt="cover" className="playlist-card-cover" />
+                  <CoverImage src={pl.cover} alt="" className="playlist-card-cover" />
                   <div className="playlist-stats">
                     <div className="playlist-stat-item">
                       <Play size={10} fill="currentColor" />
@@ -138,7 +227,7 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
                 style={{ textAlign: 'center' }}
               >
                 <div className="playlist-cover-wrapper" style={{ borderRadius: '50%', aspectRatio: '1/1', overflow: 'hidden' }}>
-                  <img src={artist.picUrl || FALLBACK_COVER} alt={artist.name} className="playlist-card-cover" style={{ objectFit: 'cover' }} />
+                  <CoverImage src={artist.picUrl} alt={artist.name} className="playlist-card-cover" style={{ objectFit: 'cover' }} />
                 </div>
                 <span className="playlist-card-name" style={{ marginTop: 12, display: 'block', width: '100%' }} title={artist.name}>{artist.name}</span>
               </div>
@@ -158,7 +247,7 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
             {toplists.map(tl => (
               <div key={tl.id} className="toplist-card glass-card" onClick={() => handlePlaylistClick(tl.id)}>
                 <div className="toplist-cover-wrapper">
-                  <img src={tl.cover || FALLBACK_COVER} alt={tl.name} className="toplist-cover" />
+                  <CoverImage src={tl.cover} alt={tl.name} className="toplist-cover" />
                   <div className="toplist-overlay">
                     <Play size={24} fill="white" />
                   </div>

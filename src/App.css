@@ -1,4 +1,4 @@
-/* 全局重置与变量定�?*/
+﻿/* 全局重置与变量定�?*/
 :root {
   --bg-gradient: linear-gradient(135deg, #0f0c1b 0%, #15102a 50%, #0a0813 100%);
   --glass-bg: rgba(255, 255, 255, 0.03);
@@ -302,6 +302,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 260px;
+  /* 不随 song-col-info 拉伸整列，避免点空白误触歌手 */
+  align-self: flex-start;
+  width: fit-content;
 }
 .song-col-album {
   flex: 1;
@@ -319,27 +322,32 @@ body {
   color: var(--text-muted);
 }
 .song-row-actions {
-  opacity: 0;
-  display: flex;
-  gap: 12px;
-  margin-left: 16px;
-  transition: opacity 0.2s;
-}
-.song-row:hover .song-row-actions {
   opacity: 1;
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+  flex-shrink: 0;
+}
+.song-row-playable {
+  cursor: pointer;
 }
 .song-row-action-btn {
   background: transparent;
   border: none;
+  border-radius: 8px;
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  transition: color 0.2s, background 0.2s;
 }
 .song-row-action-btn:hover {
   color: var(--text-main);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* 控制底栏 */
@@ -517,6 +525,40 @@ body {
 .search-bar-row {
   display: flex;
   gap: 12px;
+}
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.search-input-wrap .input-field {
+  width: 100%;
+  flex: 1;
+  padding-right: 40px;
+}
+.search-clear-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted, rgba(255, 255, 255, 0.55));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s, color 0.2s;
+}
+.search-clear-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text-main);
 }
 .input-field {
   flex: 1;
@@ -944,16 +986,6 @@ body {
   font-size: 13px;
 }
 
-
-  cursor: pointer;
-  transition: color 0.2s, text-decoration 0.2s;
-}
-
-
-  color: #a855f7;
-  text-decoration: underline;
-}
-
 .icon-btn {
   background: transparent;
   border: none;
@@ -1162,11 +1194,15 @@ body {
   color: var(--text-muted);
 }
 
-. c l i c k a b l e - a r t i s t : h o v e r   {   t e x t - d e c o r a t i o n :   u n d e r l i n e ;   c o l o r :   v a r ( - - p r i m a r y ) ;   c u r s o r :   p o i n t e r ;   } 
- 
- 
 
-.clickable-artist { cursor: pointer; transition: color 0.2s; }
+.clickable-artist {
+  cursor: pointer;
+  transition: color 0.2s;
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
+  vertical-align: baseline;
+}
 .clickable-artist:hover { text-decoration: underline; color: var(--primary); }
 
 .back-to-top-btn {
@@ -1858,3 +1894,74 @@ body {
   line-height: 1.6;
 }
 .fallback-cover { display: flex; align-items: center; justify-content: center; background-color: var(--card-bg); border: 1px solid var(--border-color); }
+
+/* ========== Android / 车机横屏适配（路线 A） ========== */
+/* html.is-android 在 index.html 尽早打上，避免 backdrop-filter 把车机 GPU 画成空白 */
+html.is-android .aurora-bg,
+body.is-android .aurora-bg {
+  display: none !important;
+  filter: none !important;
+}
+
+html.is-android .sidebar,
+html.is-android .glass-card,
+html.is-android .player-bar,
+html.is-android .lyric-view-fullscreen,
+html.is-android .playlist-stats,
+html.is-android .toplist-overlay,
+body.is-android .sidebar,
+body.is-android .glass-card,
+body.is-android .player-bar,
+body.is-android .lyric-view-fullscreen,
+body.is-android .playlist-stats,
+body.is-android .toplist-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.is-android .sidebar,
+body.is-android .sidebar {
+  background: rgba(12, 10, 22, 0.96);
+}
+
+html.is-android .glass-card,
+body.is-android .glass-card {
+  background: rgba(24, 20, 40, 0.94);
+}
+
+html.is-android .player-bar,
+body.is-android .player-bar {
+  background: rgba(12, 10, 22, 0.98);
+}
+
+body.is-android .title-drag-region {
+  display: none;
+}
+
+body.is-android .app-container {
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+}
+
+body.is-car-landscape {
+  --sidebar-width: 200px;
+  --player-height: 88px;
+}
+
+body.is-car-landscape .control-btn,
+body.is-car-landscape .song-row-action-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+body.is-car-landscape .sidebar {
+  font-size: 15px;
+}
+
+@media (orientation: landscape) and (max-height: 800px) {
+  body.is-android .main-content {
+    padding-bottom: 8px;
+  }
+}

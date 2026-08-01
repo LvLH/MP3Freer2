@@ -5,7 +5,8 @@ import { exists, readDir, readTextFile, writeFile } from '@tauri-apps/plugin-fs'
 import { emit } from '@tauri-apps/api/event';
 import md5 from 'js-md5';
 import { MusicApiService } from '../services/musicApi';
-import { getDefaultSearchSource, getDownloadPath, getPreferredQuality } from '../settings';
+import { getDefaultSearchSource, getDownloadOnFavorite, getDownloadPath, getPreferredQuality } from '../settings';
+import { resolveImageUrl } from '../services/musicApi';
 import { readAudioMetadata, downloadFile } from '../services/rustBridge';
 import { useToast } from './ToastContext';
 import { storage, StorageKeys } from '../services/storage';
@@ -20,6 +21,11 @@ import {
   parseSongName,
   directoryExists,
   isAudioFile,
+  resolveOnlineApiId,
+  normalizePersistedSong,
+  normalizePersistedSongs,
+  normalizePersistedHistory,
+  stripEphemeralStreamUrl,
 } from '../utils/songUtils';
 import type {
   Song,
@@ -55,6 +61,10 @@ interface PlayerContextType {
   toggleFavoriteArtist: (artistInfo: FavoriteArtist) => void;
   playSong: (song: Song) => Promise<void>;
   togglePlay: () => void;
+  /** 暂停并回到开头（媒体键 Stop） */
+  stopPlayback: () => void;
+  /** 按当前音质设置重新拉流（设置页改音质后调用） */
+  reloadCurrentSong: () => void;
   nextSong: () => void;
   prevSong: () => void;
   seekTo: (time: number) => void;
@@ -70,7 +80,7 @@ interface PlayerContextType {
   addAllToPlaylist: (songs: Song[]) => void;
   localDirectory: string | null;
   refreshLocalDirectory: () => Promise<void>;
-  /** 最近播放记录（最新在前，最多 200 条） */
+  /** 最近播放记录（最新在前，最多 1000 条） */
   playHistory: HistoryEntry[];
   /** 最近 7 天播放次数最多的歌曲（最多 50 首） */
   topPlayed: HistoryEntry[];
@@ -93,7 +103,9 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
 export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const toast = useToast();
-  const [playlist, setPlaylist] = useState<Song[]>(() => storage.getJSON<Song[]>(StorageKeys.CURRENT_PLAYLIST, []));
+  const [playlist, setPlaylist] = useState<Song[]>(() =>
+    normalizePersistedSongs(storage.getJSON<Song[]>(StorageKeys.CURRENT_PLAYLIST, []))
+  );
   const [playIndex, setPlayIndex] = useState<number>(() => {
     const saved = storage.getString(StorageKeys.CURRENT_PLAYINDEX);
     return saved ? parseInt(saved, 10) : -1;
@@ -114,7 +126,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [favoritePlaylists, setFavoritePlaylists] = useState<FavoritePlaylist[]>(() => storage.getJSON<FavoritePlaylist[]>(StorageKeys.FAVORITE_PLAYLISTS, []));
   const [favoriteArtists, setFavoriteArtists] = useState<FavoriteArtist[]>(() => storage.getJSON<FavoriteArtist[]>(StorageKeys.FAVORITE_ARTISTS, []));
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [playHistory, setPlayHistory] = useState<HistoryEntry[]>(() => storage.getJSON<HistoryEntry[]>(StorageKeys.PLAY_HISTORY, []));
+  const [playHistory, setPlayHistory] = useState<HistoryEntry[]>(() =>
+    normalizePersistedHistory(storage.getJSON<HistoryEntry[]>(StorageKeys.PLAY_HISTORY, []))
+  );
   const [lyricOffset, setLyricOffset] = useState<number>(0);
   const [showTranslation, setShowTranslation] = useState<boolean>(() => storage.getString(StorageKeys.SHOW_TRANSLATION) !== 'false');
   // 缓存当前歌曲的结构化歌词数据（原文+翻译+罗马音），供偏移/翻译切换时重建
@@ -123,41 +137,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const currentSongRef = useRef<Song | null>(null);
   const playModeRef = useRef<PlayMode>(playMode);
   const playlistRef = useRef<Song[]>(playlist);
+  const playHistoryRef = useRef<HistoryEntry[]>(playHistory);
+  const playIndexRef = useRef<number>(playIndex);
   const playSessionIdRef = useRef<number>(0);
   const onCanPlayRef = useRef<any>(null);
+  const autoSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 用户/逻辑期望播放；切歌时 audio.load() 会误触 pause，不能靠 pause 事件清掉它 */
+  const playIntentRef = useRef<boolean>(false);
+  /** 为 true 时忽略 audio 的 pause 事件同步（切歌 pause/load 期间） */
+  const suppressPauseSyncRef = useRef<boolean>(false);
+  /** 收藏下载会话 token：取消收藏时递增，避免下载完成后把歌重新写回 */
+  const favoriteDownloadTokenRef = useRef<Map<string, number>>(new Map());
 
-  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
-
-  const initWebAudio = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    try {
-      if (!audioContextRef.current) {
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        const ctx = new AudioContextClass();
-        audioContextRef.current = ctx;
-
-        const srcNode = ctx.createMediaElementSource(audio);
-        sourceNodeRef.current = srcNode;
-
-        const analyserNode = ctx.createAnalyser();
-        analyserNode.fftSize = 128; // 使频谱比较平滑
-        analyserNode.smoothingTimeConstant = 0.8;
-
-        srcNode.connect(analyserNode);
-        analyserNode.connect(ctx.destination);
-
-        setAnalyser(analyserNode);
-      }
-      if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume().catch(console.warn);
-      }
-    } catch (err) {
-      console.warn("WebAudio 初始化失败", err);
-    }
-  };
+  // 频谱用 SpectrumVisualizer 模拟律动，不再挂 createMediaElementSource。
+  // WebAudio 接管后若 AudioContext 被挂起（Android WebView 常见），会出现「在播但无声」。
+  const analyser: AnalyserNode | null = null;
 
   useEffect(() => {
     currentSongRef.current = currentSong;
@@ -168,9 +162,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [playMode]);
 
   useEffect(() => {
-    storage.setJSON(StorageKeys.CURRENT_PLAYLIST, playlist);
+    // 持久化时剥离在线流 URL，避免重启后复用失效 CDN 链接
+    storage.setJSON(StorageKeys.CURRENT_PLAYLIST, playlist.map(stripEphemeralStreamUrl));
     playlistRef.current = playlist;
   }, [playlist]);
+
+  useEffect(() => {
+    playHistoryRef.current = playHistory;
+  }, [playHistory]);
+
+  useEffect(() => {
+    playIndexRef.current = playIndex;
+  }, [playIndex]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -193,26 +196,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // 程序调用），只要 audio 真的 play/pause 了，就同步 store 与 ref。
     // 之前只靠各调用方手动 setIsPlaying，路径多了容易漏，导致 ref 与实际状态不一致。
     const onPlay = () => {
+      playIntentRef.current = true;
       isPlayingRef.current = true;
       playbackActions.setIsPlaying(true);
     };
     const onPause = () => {
-      // ended 时浏览器会先触发 pause 再触发 ended，这里不阻塞 ended 的自动续播判断
+      // 切歌时 pause()/load()/createMediaElementSource 都会触发 pause；
+      // 若此时清掉意图，canplay 后就不会 play，歌词进度也会停在 0。
+      if (suppressPauseSyncRef.current) return;
+      // ended 时浏览器会先 pause 再 ended；意图交由 handleSongEnded 重新置位
+      if (audio.ended) return;
+      playIntentRef.current = false;
       isPlayingRef.current = false;
       playbackActions.setIsPlaying(false);
     };
+    // 全局 error 只做日志；自动跳过由 loadSongDetails 的会话级 handler 负责，避免双重 skip
     const onError = (e: Event) => {
       console.error('Audio playback error:', e);
-      const src = audio.currentSrc || audio.src;
-      if (src.startsWith('asset:') || src.includes('asset.localhost')) {
-        toast.error(`本地音频加载失败，即将跳过：\n${currentSongRef.current?.localPath || src}`);
-      }
-      isPlayingRef.current = false;
-      playbackActions.setIsPlaying(false);
-      setTimeout(() => {
-        console.log('Auto-skipping to next song due to error...');
-        handleSongEnded();
-      }, 2000);
     };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
@@ -224,12 +224,15 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const savedLocal = storage.getString(StorageKeys.LOCAL_SONGS);
     if (savedLocal) {
-      setLocalSongs(storage.getJSON<Song[]>(StorageKeys.LOCAL_SONGS, []));
+      setLocalSongs(normalizePersistedSongs(storage.getJSON<Song[]>(StorageKeys.LOCAL_SONGS, [])));
     }
 
     const savedFavorites = storage.getString(StorageKeys.FAVORITE_SONGS);
     if (savedFavorites) {
-      setFavoriteSongs(storage.getJSON<Song[]>(StorageKeys.FAVORITE_SONGS, []));
+      // 收藏可能含已下载本地曲（保留 localPath/url）与在线条目（规范化 id、剥离流 url）
+      setFavoriteSongs(storage.getJSON<Song[]>(StorageKeys.FAVORITE_SONGS, []).map(s =>
+        s.isLocal ? s : normalizePersistedSong(s)
+      ));
     }
 
     return () => {
@@ -240,6 +243,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       audio.removeEventListener('pause', onPause);
       audio.removeEventListener('error', onError);
       audio.pause();
+      if (autoSkipTimerRef.current) clearTimeout(autoSkipTimerRef.current);
     };
   }, []);
 
@@ -270,25 +274,35 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // 同步歌词到桌面悬浮窗（lyric-overlay）
   useEffect(() => {
-    const prevLine = currentLyricIndex > 0 ? lyrics[currentLyricIndex - 1]?.text || '' : '';
-    const currentLine = currentLyricIndex >= 0 ? lyrics[currentLyricIndex]?.text || '' : '';
-    const nextLine = currentLyricIndex >= 0 && currentLyricIndex < lyrics.length - 1
-      ? lyrics[currentLyricIndex + 1]?.text || ''
-      : '';
-    const payload = {
-      prev: prevLine,
-      current: currentLine,
-      next: nextLine,
-      songName: currentSong?.name || '',
-      artist: currentSong?.artist || '',
-      isPlaying: isPlayingProgress,
+    const pushOverlayLyric = () => {
+      const prevLine = currentLyricIndex > 0 ? lyrics[currentLyricIndex - 1]?.text || '' : '';
+      const currentLine = currentLyricIndex >= 0 ? lyrics[currentLyricIndex]?.text || '' : '';
+      const nextLine = currentLyricIndex >= 0 && currentLyricIndex < lyrics.length - 1
+        ? lyrics[currentLyricIndex + 1]?.text || ''
+        : '';
+      const payload = {
+        prev: prevLine,
+        current: currentLine,
+        next: nextLine,
+        songName: currentSong?.name || '',
+        artist: currentSong?.artist || '',
+        isPlaying: isPlayingProgress,
+      };
+      // emit 失败（浏览器环境/窗口未启动）静默忽略
+      emit('overlay-lyric', payload).catch(() => {});
     };
-    // emit 失败（浏览器环境/窗口未启动）静默忽略
-    emit('overlay-lyric', payload).catch(() => {});
+
+    pushOverlayLyric();
+    // 刚打开桌面歌词时主动要一帧，避免等到下一句才显示
+    window.addEventListener('desktop-lyric-sync', pushOverlayLyric);
+    return () => window.removeEventListener('desktop-lyric-sync', pushOverlayLyric);
   }, [currentLyricIndex, lyrics, currentSong, isPlayingProgress]);
 
   useEffect(() => {
     storage.setString(StorageKeys.CURRENT_PLAYINDEX, String(playIndex));
+    // 切歌时重置歌词偏移；进度/歌词在 loadSongDetails 里复位，避免此处清空后 canplay 未触发导致歌词停住
+    setLyricOffset(0);
+    rawLyricDataRef.current = { original: '', translated: '', romanized: '' };
     if (playIndex >= 0 && playIndex < playlist.length) {
       const song = playlist[playIndex];
       setCurrentSong(song);
@@ -296,28 +310,84 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } else {
       setCurrentSong(null);
       setLyrics([]);
-      rawLyricDataRef.current = { original: '', translated: '', romanized: '' };
+      playIntentRef.current = false;
       playbackActions.reset();
     }
   }, [playIndex, playIndex >= 0 && playIndex < playlist.length ? playlist[playIndex].id : undefined]);
+
+  const scheduleAutoSkip = (reason: string) => {
+    if (autoSkipTimerRef.current) return;
+    console.log(`Auto-skipping to next song (${reason})...`);
+    autoSkipTimerRef.current = setTimeout(() => {
+      autoSkipTimerRef.current = null;
+      handleSongEnded();
+    }, 2000);
+  };
+
+  const resolveOnlinePlayUrl = async (
+    song: Song,
+    options: { forceRefresh?: boolean; allowExpiredFallback?: boolean } = {},
+  ): Promise<string | null> => {
+    const apiId = resolveOnlineApiId(song);
+    const quality = getPreferredQuality();
+    if (options.forceRefresh) {
+      resourceCache.invalidateUrl(song.source, apiId);
+    }
+    let playUrl = options.forceRefresh
+      ? null
+      : resourceCache.getUrl(song.source, apiId, quality);
+    if (!playUrl) {
+      playUrl = await MusicApiService.getSongUrl(apiId, song.source, quality);
+      if (playUrl) resourceCache.setUrl(song.source, apiId, quality, playUrl);
+    }
+    if (!playUrl && options.allowExpiredFallback) {
+      playUrl = resourceCache.getUrl(song.source, apiId, quality, true);
+    }
+    return playUrl;
+  };
 
   const loadSongDetails = async (song: Song) => {
     const audio = audioRef.current;
     if (!audio) return;
 
+    if (autoSkipTimerRef.current) {
+      clearTimeout(autoSkipTimerRef.current);
+      autoSkipTimerRef.current = null;
+    }
     if (onCanPlayRef.current) {
       audio.removeEventListener('canplay', onCanPlayRef.current.canplay);
       audio.removeEventListener('error', onCanPlayRef.current.error);
       onCanPlayRef.current = null;
     }
+
+    // 整段加载期间忽略 pause 同步：pause()/换 src/load()/WebAudio 初始化都可能触发 pause
+    suppressPauseSyncRef.current = true;
+    const wantPlay = playIntentRef.current || isPlayingRef.current;
+    if (wantPlay) playIntentRef.current = true;
     audio.pause();
+    // 切歌时复位进度（store + 元素），避免旧 currentTime 套到新歌词上
+    audio.currentTime = 0;
+    playbackActions.setCurrentTime(0);
+    playbackActions.setDuration(0);
+    if (wantPlay) {
+      isPlayingRef.current = true;
+      playbackActions.setIsPlaying(true);
+    }
 
     playSessionIdRef.current += 1;
     const currentSession = playSessionIdRef.current;
+    let urlRetried = false;
+    let startedPlayback = false;
+
+    const releasePauseSuppress = () => {
+      if (currentSession === playSessionIdRef.current) {
+        suppressPauseSyncRef.current = false;
+      }
+    };
 
     try {
       setIsLoading(!song.isLocal);
-      let playUrl = song.url;
+      let playUrl: string | null = null;
       let lyricText = song.lyric || '';
       let picUrl = song.pic;
 
@@ -333,24 +403,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           playUrl = null;
         }
       } else {
-        const apiId = song.originalId || song.id;
-        const quality = getPreferredQuality();
-        if (!playUrl) {
-          // 优先查缓存
-          playUrl = resourceCache.getUrl(song.source, apiId, quality);
-          if (!playUrl) {
-            // 按用户偏好音质请求（lossless/hires 时尝试网易官方 enhance 接口）
-            playUrl = await MusicApiService.getSongUrl(apiId, song.source, quality);
-            if (playUrl) resourceCache.setUrl(song.source, apiId, quality, playUrl);
-          }
-        }
+        // 在线歌曲始终动态解析 URL，不信任持久化/传入的 song.url（CDN 易过期）
+        playUrl = await resolveOnlinePlayUrl(song, { allowExpiredFallback: true });
         if (!lyricText && song.lyric_id) {
           const lrcData = await MusicApiService.getSongLyric(song.lyric_id, song.source);
           lyricText = lrcData.original;
           rawLyricDataRef.current = { original: lrcData.original, translated: lrcData.translated, romanized: lrcData.romanized };
         }
         if (!picUrl && song.pic_id) {
-          // 优先查封面缓存
           picUrl = resourceCache.getPic(song.source, song.pic_id);
           if (!picUrl) {
             picUrl = await MusicApiService.getSongPic(song.pic_id, song.source);
@@ -360,97 +420,182 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
 
       if (currentSession !== playSessionIdRef.current) {
-        return; // 用户已切换到其他歌曲，丢弃本次结果
+        return; // 用户已切换到其他歌曲，丢弃本次结果（suppress 由新会话接管）
       }
 
-      const updatedSong = { ...song, url: playUrl, lyric: lyricText, pic: picUrl };
+      // 歌词就绪后立刻解析上屏，不依赖 canplay（避免 canplay 未触发时歌词空白/停住）
+      const rawForLyrics = rawLyricDataRef.current.original
+        ? rawLyricDataRef.current
+        : { original: lyricText, translated: '', romanized: '' };
+      setLyrics(parseLrcWithExtras(rawForLyrics.original, rawForLyrics.translated, rawForLyrics.romanized, 0));
+
+      // 内存中可暂存当前会话 playUrl；持久化层会剥离在线 url
+      const updatedSong = {
+        ...song,
+        url: song.isLocal ? (song.localPath || playUrl) : playUrl,
+        lyric: lyricText,
+        pic: resolveImageUrl(picUrl) || picUrl || null,
+      };
+      setCurrentSong(updatedSong);
       setPlaylist(prev => {
         const copy = [...prev];
-        if (playIndex >= 0 && playIndex < copy.length) copy[playIndex] = updatedSong;
+        const idx = playIndexRef.current;
+        if (idx >= 0 && idx < copy.length) copy[idx] = updatedSong;
         return copy;
       });
 
       if (!playUrl) {
         toast.error(`获取歌曲播放链接失败！即将自动跳过...\n\n歌曲：${song.name}\n该歌曲可能为 VIP 专享或接口无响应，请稍后重试。`);
+        playIntentRef.current = false;
         isPlayingRef.current = false;
         playbackActions.setIsPlaying(false);
-        setTimeout(() => {
-          console.log('Auto-skipping to next song due to empty playUrl...');
-          handleSongEnded();
-        }, 2000);
+        releasePauseSuppress();
+        scheduleAutoSkip('empty playUrl');
         return;
       }
 
+      const startPlaybackIfNeeded = () => {
+        if (currentSession !== playSessionIdRef.current) return;
+        if (startedPlayback) return;
+        startedPlayback = true;
+
+        // 真正开始播放时记历史（覆盖自动连播路径）
+        recordPlay(song);
+
+        if (!playIntentRef.current) {
+          releasePauseSuppress();
+          return;
+        }
+
+        isPlayingRef.current = true;
+        playbackActions.setIsPlaying(true);
+        audio.play()
+          .then(() => {
+            playIntentRef.current = true;
+            isPlayingRef.current = true;
+            playbackActions.setIsPlaying(true);
+          })
+          .catch(err => {
+            console.error('Playback start failed:', err);
+            playIntentRef.current = false;
+            isPlayingRef.current = false;
+            playbackActions.setIsPlaying(false);
+          })
+          .finally(() => {
+            releasePauseSuppress();
+          });
+      };
+
       const onCanPlay = () => {
+        if (currentSession !== playSessionIdRef.current) return;
         if (onCanPlayRef.current) {
           audio.removeEventListener('canplay', onCanPlayRef.current.canplay);
           audio.removeEventListener('error', onCanPlayRef.current.error);
           onCanPlayRef.current = null;
         }
-        // 若仅是本地已缓存的纯文本歌词，ref 可能空，补一下
-        const raw = rawLyricDataRef.current.original ? rawLyricDataRef.current : { original: lyricText, translated: '', romanized: '' };
-        setLyrics(parseLrcWithExtras(raw.original, raw.translated, raw.romanized, lyricOffset));
-        // 读 ref 而非闭包里的 isPlaying：canplay 可能在用户已切歌/暂停后很久才触发，
-        // 闭包值会陈旧。isPlayingRef 始终镜像最新状态（由上方订阅同步）。
-        if (isPlayingRef.current) {
-          initWebAudio();
-          audio.play().catch(err => {
-            console.error('Playback start failed:', err);
-            isPlayingRef.current = false;
-            playbackActions.setIsPlaying(false);
-          });
-        }
+        startPlaybackIfNeeded();
       };
 
-      const onError = (e: Event) => {
-        console.error("Audio playback error:", e, audio.error);
-        toast.error(`音频流加载失败(Error Code: ${audio.error?.code})，即将自动跳过下一首。`);
-        isPlayingRef.current = false;
-        playbackActions.setIsPlaying(false);
-        setTimeout(() => {
-          console.log('Auto-skipping to next song due to error...');
-          handleSongEnded();
-        }, 2000);
+      const onError = () => {
+        if (currentSession !== playSessionIdRef.current) return;
+        void (async () => {
+          // 在线流失效：失效缓存并重拉一次
+          if (!song.isLocal && !urlRetried) {
+            urlRetried = true;
+            try {
+              const refreshed = await resolveOnlinePlayUrl(song, {
+                forceRefresh: true,
+                allowExpiredFallback: false,
+              });
+              if (currentSession !== playSessionIdRef.current) return;
+              if (refreshed) {
+                startedPlayback = false;
+                audio.src = refreshed;
+                audio.load();
+                return;
+              }
+            } catch (err) {
+              console.warn('Retry getSongUrl after audio error failed:', err);
+            }
+          }
+          console.error('Audio playback error:', audio.error);
+          if (song.isLocal) {
+            toast.error(`本地音频加载失败，即将跳过：\n${song.localPath || song.name}`);
+          } else {
+            toast.error(`音频流加载失败(Error Code: ${audio.error?.code})，即将自动跳过下一首。`);
+          }
+          playIntentRef.current = false;
+          isPlayingRef.current = false;
+          playbackActions.setIsPlaying(false);
+          releasePauseSuppress();
+          scheduleAutoSkip('audio error');
+        })();
       };
 
-      if (onCanPlayRef.current) {
-        audio.removeEventListener('canplay', onCanPlayRef.current.canplay);
-        audio.removeEventListener('error', onCanPlayRef.current.error);
-      }
-      
       onCanPlayRef.current = { canplay: onCanPlay, error: onError };
       audio.addEventListener('canplay', onCanPlay);
       audio.addEventListener('error', onError);
+
+      // 先摘掉旧 src 再赋值，避免同源重复赋值时浏览器不触发 canplay（歌词/播放都会停住）
+      audio.removeAttribute('src');
       audio.src = playUrl;
       audio.load();
+
+      // 资源已在缓冲里时 canplay 可能不会再发，主动补一次
+      if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+        onCanPlay();
+      }
     } catch (err) {
       console.error('Error loading song details:', err);
+      playIntentRef.current = false;
       isPlayingRef.current = false;
       playbackActions.setIsPlaying(false);
+      releasePauseSuppress();
       toast.error('无法加载该歌曲的播放资源。\n\n建议：如果频繁发生，请尝试在“设置”中配置代理，或者勾选更换其他第三方接口节点。');
     } finally {
-      setIsLoading(false);
+      if (currentSession === playSessionIdRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleSongEnded = () => {
+    playIntentRef.current = true;
     if (playModeRef.current === 'single-loop') {
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(console.error);
-      }
-    } else {
-      setPlayIndex(prevIdx => {
-        const pl = playlistRef.current;
-        if (pl.length === 0) return prevIdx;
-        const nextIdx = playModeRef.current === 'random'
-          ? Math.floor(Math.random() * pl.length)
-          : (prevIdx + 1) % pl.length;
         isPlayingRef.current = true;
         playbackActions.setIsPlaying(true);
-        return nextIdx;
-      });
+        audioRef.current.play().catch(console.error);
+      }
+      return;
     }
+
+    const pl = playlistRef.current;
+    if (pl.length === 0) return;
+
+    setPlayIndex(prevIdx => {
+      const nextIdx = playModeRef.current === 'random'
+        ? Math.floor(Math.random() * pl.length)
+        : (prevIdx + 1) % pl.length;
+
+      // 队列仅 1 首或随机抽到同一首时，index 不变不会触发 effect，需手动重播
+      if (nextIdx === prevIdx) {
+        queueMicrotask(() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          audio.currentTime = 0;
+          playIntentRef.current = true;
+          isPlayingRef.current = true;
+          playbackActions.setIsPlaying(true);
+          audio.play().catch(console.error);
+        });
+      }
+
+      isPlayingRef.current = true;
+      playbackActions.setIsPlaying(true);
+      return nextIdx;
+    });
   };
 
   // 记录播放历史（去重：同一首歌 5 秒内不重复记录）
@@ -463,9 +608,37 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const schedulePersistHistory = (entries: HistoryEntry[]) => {
     if (persistHistoryTimerRef.current) clearTimeout(persistHistoryTimerRef.current);
     persistHistoryTimerRef.current = setTimeout(() => {
-      storage.setJSON(StorageKeys.PLAY_HISTORY, entries);
+      storage.setJSON(
+        StorageKeys.PLAY_HISTORY,
+        entries.map(e => ({ ...e, song: stripEphemeralStreamUrl(e.song) })),
+      );
+      persistHistoryTimerRef.current = null;
     }, 1500);
   };
+
+  const flushPlayHistory = () => {
+    if (!persistHistoryTimerRef.current) return;
+    clearTimeout(persistHistoryTimerRef.current);
+    persistHistoryTimerRef.current = null;
+    storage.setJSON(
+      StorageKeys.PLAY_HISTORY,
+      playHistoryRef.current.map(e => ({ ...e, song: stripEphemeralStreamUrl(e.song) })),
+    );
+  };
+
+  // 退出/切后台时立即刷盘，避免 1.5s 防抖丢最近记录
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flushPlayHistory();
+    };
+    window.addEventListener('beforeunload', flushPlayHistory);
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('beforeunload', flushPlayHistory);
+      document.removeEventListener('visibilitychange', onHide);
+      flushPlayHistory();
+    };
+  }, []);
 
   const recordPlay = (song: Song) => {
     const now = Date.now();
@@ -476,8 +649,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setPlayHistory(prev => {
       // 纯追加：不再去重，为了智能歌单能够正确统计播放次数
-      const updated = [{ song, playedAt: now }, ...prev].slice(0, 1000);
-      schedulePersistHistory(updated); // 防抖合并写入
+      const entrySong = stripEphemeralStreamUrl(song);
+      const updated = [{ song: entrySong, playedAt: now }, ...prev].slice(0, 1000);
+      schedulePersistHistory(updated);
       return updated;
     });
   };
@@ -539,13 +713,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const playSong = async (song: Song) => {
-    recordPlay(song);
+    // 历史在 canplay 成功时记录，覆盖手动点播与自动连播
+    playIntentRef.current = true;
     const idx = playlist.findIndex(s => s.id === song.id);
     if (idx >= 0) {
       if (idx === playIndex && currentSong?.id === song.id) {
         isPlayingRef.current = true;
         playbackActions.setIsPlaying(true);
-        initWebAudio();
         audioRef.current?.play().catch(console.error);
       } else {
         setPlayIndex(idx);
@@ -567,23 +741,50 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!audio || !currentSong) return;
 
     // 读 ref 而非闭包 isPlaying，保证拿到最新状态
-    if (isPlayingRef.current) {
+    if (isPlayingRef.current || playIntentRef.current) {
+      playIntentRef.current = false;
       audio.pause();
       isPlayingRef.current = false;
       playbackActions.setIsPlaying(false);
     } else {
-      initWebAudio();
+      playIntentRef.current = true;
       audio.play()
         .then(() => {
           isPlayingRef.current = true;
           playbackActions.setIsPlaying(true);
         })
-        .catch(err => console.error('Toggle play failed:', err));
+        .catch(err => {
+          console.error('Toggle play failed:', err);
+          playIntentRef.current = false;
+        });
     }
+  };
+
+  const stopPlayback = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    playIntentRef.current = false;
+    suppressPauseSyncRef.current = false;
+    audio.pause();
+    isPlayingRef.current = false;
+    playbackActions.setIsPlaying(false);
+    audio.currentTime = 0;
+    playbackActions.setCurrentTime(0);
+  };
+
+  const reloadCurrentSong = () => {
+    const idx = playIndexRef.current;
+    const pl = playlistRef.current;
+    if (idx < 0 || idx >= pl.length) return;
+    const song = pl[idx];
+    if (song.isLocal) return;
+    resourceCache.invalidateUrl(song.source, resolveOnlineApiId(song));
+    void loadSongDetails({ ...song, url: null });
   };
 
   const nextSong = () => {
     if (playlist.length === 0) return;
+    playIntentRef.current = true;
     const nextIdx = playMode === 'random'
       ? Math.floor(Math.random() * playlist.length)
       : (playIndex + 1) % playlist.length;
@@ -591,7 +792,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (nextIdx === playIndex) {
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
-        initWebAudio();
         audioRef.current.play().catch(console.error);
       }
     } else {
@@ -603,6 +803,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const prevSong = () => {
     if (playlist.length === 0) return;
+    playIntentRef.current = true;
     const prevIdx = playMode === 'random'
       ? Math.floor(Math.random() * playlist.length)
       : (playIndex - 1 + playlist.length) % playlist.length;
@@ -610,7 +811,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (prevIdx === playIndex) {
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
-        initWebAudio();
         audioRef.current.play().catch(console.error);
       }
     } else {
@@ -645,6 +845,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const idx = playlist.findIndex(s => s.id === song.id);
     if (idx >= 0) {
       if (playImmediately) {
+        playIntentRef.current = true;
         setPlayIndex(idx);
         isPlayingRef.current = true;
         playbackActions.setIsPlaying(true);
@@ -655,6 +856,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const newPlaylist = [...playlist, song];
     setPlaylist(newPlaylist);
     if (playImmediately) {
+      playIntentRef.current = true;
       setPlayIndex(newPlaylist.length - 1);
       isPlayingRef.current = true;
       playbackActions.setIsPlaying(true);
@@ -669,6 +871,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setPlaylist(newPlaylist);
 
     if (newPlaylist.length === 0) {
+      playIntentRef.current = false;
       setPlayIndex(-1);
       isPlayingRef.current = false;
       playbackActions.setIsPlaying(false);
@@ -681,6 +884,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const clearPlaylist = () => {
+    playIntentRef.current = false;
     setPlaylist([]);
     setPlayIndex(-1);
     isPlayingRef.current = false;
@@ -691,17 +895,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const playAll = (songs: Song[]) => {
     if (songs.length === 0) return;
+    playIntentRef.current = true;
+    const sameFirstPlaying =
+      playIndex === 0 && playlist[0]?.id === songs[0]?.id;
     setPlaylist(songs);
-
-    if (playIndex === 0 && playlist[0]?.id === songs[0]?.id) {
-      isPlayingRef.current = true;
-      playbackActions.setIsPlaying(true);
-      initWebAudio();
+    isPlayingRef.current = true;
+    playbackActions.setIsPlaying(true);
+    if (sameFirstPlaying) {
       audioRef.current?.play().catch(console.error);
     } else {
+      // 始终显式切到 0；若本就在 0 且首曲 id 不同，依赖 effect 的 song.id 变化触发加载
       setPlayIndex(0);
-      isPlayingRef.current = true;
-      playbackActions.setIsPlaying(true);
     }
   };
 
@@ -743,7 +947,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const persistFavorites = (updater: (songs: Song[]) => Song[]) => {
     setFavoriteSongs(prev => {
       const updated = updater(prev);
-      storage.setJSON(StorageKeys.FAVORITE_SONGS, updated);
+      storage.setJSON(
+        StorageKeys.FAVORITE_SONGS,
+        updated.map(s => (s.isLocal ? s : stripEphemeralStreamUrl(s))),
+      );
       return updated;
     });
   };
@@ -762,14 +969,24 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const toggleFavorite = async (song: Song) => {
     const existsInFavorites = favoriteSongs.some(s => s.id === song.id);
     if (existsInFavorites) {
+      favoriteDownloadTokenRef.current.set(
+        song.id,
+        (favoriteDownloadTokenRef.current.get(song.id) || 0) + 1,
+      );
       persistFavorites(prev => prev.filter(s => s.id !== song.id));
       return;
     }
 
-    let songToSave: Song = { ...song, url: song.url || song.localPath || null };
+    const downloadToken = (favoriteDownloadTokenRef.current.get(song.id) || 0) + 1;
+    favoriteDownloadTokenRef.current.set(song.id, downloadToken);
+
+    let songToSave: Song = {
+      ...stripEphemeralStreamUrl(song),
+      url: song.isLocal ? (song.url || song.localPath || null) : null,
+    };
     upsertFavorite(songToSave);
 
-    if (!song.isLocal) {
+    if (!song.isLocal && getDownloadOnFavorite()) {
       const downloadPath = getDownloadPath();
       if (!(await directoryExists(downloadPath))) {
         toast.error(`收藏下载目录不存在，请先到设置中重新选择：\n${downloadPath}`);
@@ -783,26 +1000,27 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const lrcPath = joinPath(downloadPath, lrcFileName);
 
         if (!(await exists(filePath))) {
-          if (!songToSave.url) {
-            const apiId = song.originalId || song.id;
-            // 优先查缓存
-            songToSave.url = resourceCache.getUrl(song.source, apiId, getPreferredQuality());
-            if (!songToSave.url) {
-              songToSave.url = await MusicApiService.getSongUrl(apiId, song.source);
-              if (songToSave.url) resourceCache.setUrl(song.source, apiId, getPreferredQuality(), songToSave.url);
-            }
+          const apiId = resolveOnlineApiId(song);
+          let downloadUrl = resourceCache.getUrl(song.source, apiId, getPreferredQuality());
+          if (!downloadUrl) {
+            downloadUrl = await MusicApiService.getSongUrl(apiId, song.source, getPreferredQuality());
+            if (downloadUrl) resourceCache.setUrl(song.source, apiId, getPreferredQuality(), downloadUrl);
+          }
+          if (!downloadUrl) {
+            downloadUrl = resourceCache.getUrl(song.source, apiId, getPreferredQuality(), true);
           }
 
-          if (!songToSave.url) {
+          if (!downloadUrl) {
             toast.warning(`未能获取歌曲下载地址，已收藏但无法下载：${song.artist} - ${song.name}`);
             return;
           }
 
-          // 走 Rust 后端下载：不阻塞 UI 线程，且带进度回调
-          await downloadFile(songToSave.url, filePath, (percent) => {
+          await downloadFile(downloadUrl, filePath, (percent) => {
             console.log(`[下载] ${song.artist} - ${song.name}: ${percent.toFixed(0)}%`);
           });
         }
+
+        if (favoriteDownloadTokenRef.current.get(song.id) !== downloadToken) return;
 
         let lyricText = songToSave.lyric || '';
         if (!lyricText && songToSave.lyric_id) {
@@ -811,6 +1029,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (lyricText && !(await exists(lrcPath))) {
           await writeFile(lrcPath, new TextEncoder().encode(lyricText));
         }
+
+        if (favoriteDownloadTokenRef.current.get(song.id) !== downloadToken) return;
 
         songToSave = {
           ...songToSave,
@@ -822,9 +1042,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
         upsertFavorite(songToSave);
       } catch (err) {
+        if (favoriteDownloadTokenRef.current.get(song.id) !== downloadToken) return;
         console.error('Failed to download favorite song:', err);
         toast.error(`已收藏，但下载歌曲失败：${song.artist} - ${song.name}`);
-        return;
       }
     }
   };
@@ -845,10 +1065,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const source = getDefaultSearchSource();
       const searchResults = await MusicApiService.searchSongs(`${song.artist} ${song.name}`, source);
-      const matched = searchResults.find(s =>
-        s.name.toLowerCase().includes(song.name.toLowerCase()) ||
-        song.name.toLowerCase().includes(s.name.toLowerCase())
-      ) || searchResults[0];
+      const songNameLower = song.name.toLowerCase().trim();
+      const artistToken = song.artist.split(/[/,&，、]/)[0]?.toLowerCase().trim() || '';
+      // 高置信匹配：歌名足够像 + 歌手对得上；不再盲目取 searchResults[0]
+      const matched = searchResults.find(s => {
+        const candidateName = s.name.toLowerCase().trim();
+        const nameClose =
+          candidateName === songNameLower ||
+          (songNameLower.length >= 4 && (
+            candidateName.includes(songNameLower) || songNameLower.includes(candidateName)
+          ));
+        if (!nameClose) return false;
+        if (!artistToken || artistToken === '未知歌手') return candidateName === songNameLower;
+        const candidateArtist = s.artist.toLowerCase();
+        return candidateArtist.includes(artistToken) || artistToken.includes(candidateArtist.split(/[/,&，、]/)[0] || '');
+      });
 
       if (!matched) return { lyricText: existingLyric, picUrl: null };
 
@@ -955,21 +1186,41 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const refreshLocalDirectory = async () => {
-    if (!localDirectory) return;
-    try {
-      const entries = await readDir(localDirectory);
-      const audioFiles: Song[] = [];
+    // 聚合：当前目录 + 已导入歌曲涉及的所有父目录（支持多目录 import 后刷新不丢）
+    const dirs = new Set<string>();
+    if (localDirectory) dirs.add(localDirectory);
+    for (const s of localSongs) {
+      const path = s.localPath;
+      if (!path) continue;
+      const slash = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+      if (slash > 0) dirs.add(path.slice(0, slash));
+    }
+    if (dirs.size === 0) return;
 
-      for (const entry of entries) {
-        if (!entry.isFile) continue;
-        const song = await buildSongFromEntry(localDirectory, entry.name);
-        if (song) audioFiles.push(song);
+    try {
+      const audioFiles: Song[] = [];
+      const seenPaths = new Set<string>();
+
+      for (const dir of dirs) {
+        try {
+          const entries = await readDir(dir);
+          for (const entry of entries) {
+            if (!entry.isFile) continue;
+            const song = await buildSongFromEntry(dir, entry.name);
+            if (song?.localPath && !seenPaths.has(song.localPath)) {
+              seenPaths.add(song.localPath);
+              audioFiles.push(song);
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to refresh local folder:', dir, err);
+        }
       }
 
       setLocalSongs(audioFiles);
       storage.setJSON(StorageKeys.LOCAL_SONGS, audioFiles);
     } catch (err) {
-      console.error('Failed to refresh local folder:', err);
+      console.error('Failed to refresh local folders:', err);
     }
   };
 
@@ -988,6 +1239,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isFavorite,
       playSong,
       togglePlay,
+      stopPlayback,
+      reloadCurrentSong,
       nextSong,
       prevSong,
       seekTo,
@@ -1019,7 +1272,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toggleShowTranslation,
       analyser,
     }}>
-      <audio ref={audioRef} crossOrigin="anonymous" style={{ display: 'none' }} />
+      {/* 不设 crossOrigin：在线 CDN 常无 CORS，会导致 Android/WebView 无声或无法解码 */}
+      <audio ref={audioRef} style={{ display: 'none' }} preload="auto" />
       {children}
     </PlayerContext.Provider>
   );

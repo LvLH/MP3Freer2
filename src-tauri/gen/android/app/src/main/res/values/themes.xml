@@ -1,0 +1,9 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.tauri_app" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">#0f0a1a</item>
+        <item name="android:colorBackground">#0f0a1a</item>
+        <item name="android:statusBarColor">#0f0a1a</item>
+        <item name="android:navigationBarColor">#0f0a1a</item>
+        <item name="android:windowFullscreen">false</item>
+    </style>
+</resources>

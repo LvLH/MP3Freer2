@@ -16,11 +16,11 @@ function recentSongs(history: HistoryEntry[], days: number): HistoryEntry[] {
   return history.filter(e => e.playedAt >= cutoff);
 }
 
-/** 按歌曲 id 去重，保留最新 entry */
+/** 按歌曲 id 去重，保留最新 entry（history 最新在前，首次写入后不覆盖） */
 function dedupeBySongId(entries: HistoryEntry[]): Map<string, HistoryEntry> {
   const map = new Map<string, HistoryEntry>();
   for (const e of entries) {
-    map.set(e.song.id, e); // 后出现的覆盖前面的，但 history 是最新在前
+    if (!map.has(e.song.id)) map.set(e.song.id, e);
   }
   return map;
 }

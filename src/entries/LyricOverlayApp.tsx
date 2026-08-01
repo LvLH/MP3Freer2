@@ -1,6 +1,30 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { listen, emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { LogicalSize } from '@tauri-apps/api/dpi';
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Lock,
+  Unlock,
+  X,
+  Minus,
+  Plus,
+  Rows2,
+  Rows3,
+} from 'lucide-react';
+import {
+  ACCENT_OPTIONS,
+  DesktopLyricSettings,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  FONT_SIZE_STEP,
+  estimateOverlayHeight,
+  loadDesktopLyricSettings,
+  saveDesktopLyricSettings,
+} from '../utils/desktopLyricSettings';
 
 interface LyricPayload {
   current: string;
@@ -28,21 +52,57 @@ interface ContextMenuState {
 
 export function LyricOverlayApp() {
   const [payload, setPayload] = useState<LyricPayload>(EMPTY);
-  const [locked, setLocked] = useState<boolean>(true);
-  const [hovered, setHovered] = useState<boolean>(false);
+  const [locked, setLocked] = useState(true);
+  const [hovered, setHovered] = useState(false);
   const [menu, setMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0 });
+  const [settings, setSettings] = useState<DesktopLyricSettings>(() => loadDesktopLyricSettings());
+  const [lineAnimKey, setLineAnimKey] = useState(0);
   const dragTriggeredRef = useRef(false);
+  const lastCurrentRef = useRef('');
+
+  const accentMeta = useMemo(
+    () => ACCENT_OPTIONS.find(a => a.id === settings.accent) || ACCENT_OPTIONS[0],
+    [settings.accent],
+  );
+
+  const applyWindowHeight = useCallback(async (next: DesktopLyricSettings) => {
+    try {
+      const height = estimateOverlayHeight(next);
+      await getCurrentWindow().setSize(new LogicalSize(720, height));
+    } catch (err) {
+      console.warn('调整桌面歌词窗口高度失败:', err);
+    }
+  }, []);
+
+  const updateSettings = useCallback((patch: Partial<DesktopLyricSettings>) => {
+    setSettings(prev => {
+      const next = { ...prev, ...patch };
+      saveDesktopLyricSettings(next);
+      void applyWindowHeight(next);
+      return next;
+    });
+  }, [applyWindowHeight]);
+
+  useEffect(() => {
+    void applyWindowHeight(settings);
+    // 仅挂载时按已存设置校正一次高度
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const unlisten = listen<LyricPayload>('overlay-lyric', (event) => {
-      setPayload(event.payload);
+      const next = event.payload;
+      if (next.current !== lastCurrentRef.current) {
+        lastCurrentRef.current = next.current;
+        setLineAnimKey(k => k + 1);
+      }
+      setPayload(next);
     });
     return () => {
       unlisten.then(fn => fn());
     };
   }, []);
 
-  // 关闭右键菜单：点击任意位置
   useEffect(() => {
     if (!menu.visible) return;
     const close = () => setMenu({ visible: false, x: 0, y: 0 });
@@ -50,9 +110,7 @@ export function LyricOverlayApp() {
     return () => window.removeEventListener('click', close);
   }, [menu.visible]);
 
-  // 拖拽：未锁定时左键按住移动触发
   const handleMouseDown = (e: React.MouseEvent) => {
-    // 右键不参与拖动
     if (e.button !== 0) return;
     if (locked) return;
     dragTriggeredRef.current = false;
@@ -73,7 +131,6 @@ export function LyricOverlayApp() {
     window.addEventListener('mouseup', onUp);
   };
 
-  // 双击切换锁定/解锁
   const handleDoubleClick = () => {
     if (dragTriggeredRef.current) {
       dragTriggeredRef.current = false;
@@ -82,22 +139,36 @@ export function LyricOverlayApp() {
     setLocked(l => !l);
   };
 
-  // 右键菜单：阻止浏览器默认菜单，显示自定义控制菜单
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setMenu({ visible: true, x: e.clientX, y: e.clientY });
+    // 避免菜单贴边被裁切
+    const x = Math.min(e.clientX, window.innerWidth - 320);
+    const y = Math.min(e.clientY, window.innerHeight - 48);
+    setMenu({ visible: true, x: Math.max(4, x), y: Math.max(4, y) });
   };
 
-  // 菜单项点击：emit system-action 到主窗口（主窗口 useShortcuts 已监听）
   const sendAction = (action: string) => {
     emit('system-action', action).catch(() => {});
     setMenu({ visible: false, x: 0, y: 0 });
   };
 
+  const cycleAccent = () => {
+    const idx = ACCENT_OPTIONS.findIndex(a => a.id === settings.accent);
+    const next = ACCENT_OPTIONS[(idx + 1) % ACCENT_OPTIONS.length];
+    updateSettings({ accent: next.id });
+  };
+
+  const rootStyle = {
+    '--lyric-font-size': `${settings.fontSize}px`,
+    '--lyric-accent': accentMeta.color,
+    '--lyric-accent-rgb': hexToRgbTriplet(accentMeta.color),
+  } as React.CSSProperties;
+
   return (
     <div
       className={`overlay-root ${locked ? 'locked' : 'unlocked'}`}
+      style={rootStyle}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onMouseDown={handleMouseDown}
@@ -105,26 +176,33 @@ export function LyricOverlayApp() {
       onContextMenu={handleContextMenu}
       title={locked ? '双击解锁后可拖动 · 右键菜单' : '双击锁定 · 拖动移动 · 右键菜单'}
     >
-      {/* 控制栏：仅 hover 时显示 */}
       <div className={`overlay-controls ${hovered ? 'show' : ''}`}>
         <span className="overlay-song-label">
           {payload.songName}
           {payload.artist && <span className="overlay-artist-label"> — {payload.artist}</span>}
         </span>
-        <span className="overlay-lock-label">{locked ? '🔒' : '🔓'}</span>
+        <span className="overlay-lock-label" aria-hidden>
+          {locked ? <Lock size={10} /> : <Unlock size={10} />}
+        </span>
       </div>
 
-      {/* 歌词区：双行（当前 + 下一行） */}
-      <div className="overlay-lyric-text">
-        <div className={`lyric-current ${payload.isPlaying ? 'playing' : ''}`}>
+      <div className={`overlay-lyric-text ${settings.showPrev ? 'three-line' : 'two-line'}`}>
+        {settings.showPrev && (
+          <div className="lyric-side lyric-prev">
+            {payload.prev || '\u00A0'}
+          </div>
+        )}
+        <div
+          key={lineAnimKey}
+          className={`lyric-current lyric-swap ${payload.isPlaying ? 'playing' : ''}`}
+        >
           {payload.current || '♪'}
         </div>
-        {payload.next && (
-          <div className="lyric-next">{payload.next}</div>
-        )}
+        <div className="lyric-side lyric-next">
+          {payload.next || '\u00A0'}
+        </div>
       </div>
 
-      {/* 右键控制菜单：水平图标条，高度低不被截断 */}
       {menu.visible && (
         <div
           className="ctx-menu-bar"
@@ -132,18 +210,94 @@ export function LyricOverlayApp() {
           onClick={(e) => e.stopPropagation()}
           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
         >
-          <button className="ctx-icon-btn" title={payload.isPlaying ? '暂停' : '播放'} onClick={() => sendAction('play-pause')}>
-            {payload.isPlaying ? '⏸' : '▶'}
+          <button
+            className="ctx-icon-btn"
+            title={payload.isPlaying ? '暂停' : '播放'}
+            onClick={() => sendAction('play-pause')}
+          >
+            {payload.isPlaying ? <Pause size={14} /> : <Play size={14} />}
           </button>
-          <button className="ctx-icon-btn" title="上一首" onClick={() => sendAction('prev')}>⏮</button>
-          <button className="ctx-icon-btn" title="下一首" onClick={() => sendAction('next')}>⏭</button>
+          <button className="ctx-icon-btn" title="上一首" onClick={() => sendAction('prev')}>
+            <SkipBack size={14} />
+          </button>
+          <button className="ctx-icon-btn" title="下一首" onClick={() => sendAction('next')}>
+            <SkipForward size={14} />
+          </button>
+
           <span className="ctx-sep" />
-          <button className="ctx-icon-btn" title={locked ? '解锁（可拖动）' : '锁定'} onClick={() => { setLocked(l => !l); setMenu({ visible: false, x: 0, y: 0 }); }}>
-            {locked ? '🔓' : '🔒'}
+
+          <button
+            className="ctx-icon-btn"
+            title={locked ? '解锁（可拖动）' : '锁定'}
+            onClick={() => {
+              setLocked(l => !l);
+              setMenu({ visible: false, x: 0, y: 0 });
+            }}
+          >
+            {locked ? <Unlock size={14} /> : <Lock size={14} />}
           </button>
-          <button className="ctx-icon-btn danger" title="关闭桌面歌词" onClick={() => { getCurrentWindow().hide().catch(console.error); setMenu({ visible: false, x: 0, y: 0 }); }}>✕</button>
+
+          <span className="ctx-sep" />
+
+          <button
+            className="ctx-icon-btn"
+            title="缩小字号"
+            disabled={settings.fontSize <= FONT_SIZE_MIN}
+            onClick={() => updateSettings({ fontSize: settings.fontSize - FONT_SIZE_STEP })}
+          >
+            <Minus size={14} />
+          </button>
+          <span className="ctx-size-label">{settings.fontSize}</span>
+          <button
+            className="ctx-icon-btn"
+            title="放大字号"
+            disabled={settings.fontSize >= FONT_SIZE_MAX}
+            onClick={() => updateSettings({ fontSize: settings.fontSize + FONT_SIZE_STEP })}
+          >
+            <Plus size={14} />
+          </button>
+
+          <button
+            className="ctx-icon-btn ctx-swatch"
+            title={`高亮颜色：${accentMeta.name}（点击切换）`}
+            onClick={cycleAccent}
+            style={{ color: accentMeta.color }}
+          >
+            <span className="ctx-swatch-dot" style={{ background: accentMeta.color }} />
+          </button>
+
+          <button
+            className="ctx-icon-btn"
+            title={settings.showPrev ? '切换为双行' : '切换为三行（含上一句）'}
+            onClick={() => updateSettings({ showPrev: !settings.showPrev })}
+          >
+            {settings.showPrev ? <Rows3 size={14} /> : <Rows2 size={14} />}
+          </button>
+
+          <span className="ctx-sep" />
+
+          <button
+            className="ctx-icon-btn danger"
+            title="关闭桌面歌词"
+            onClick={() => {
+              getCurrentWindow().hide().catch(console.error);
+              setMenu({ visible: false, x: 0, y: 0 });
+            }}
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+function hexToRgbTriplet(hex: string): string {
+  const raw = hex.replace('#', '');
+  if (raw.length !== 6) return '192, 132, 252';
+  const n = Number.parseInt(raw, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `${r}, ${g}, ${b}`;
 }

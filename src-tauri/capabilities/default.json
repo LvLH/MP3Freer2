@@ -3,8 +3,7 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main",
-    "lyric-overlay"
+    "main"
   ],
   "permissions": [
     "core:default",
@@ -18,7 +17,6 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "core:event:default",
-    "global-shortcut:default",
     "opener:default",
     "dialog:default",
     "fs:default",

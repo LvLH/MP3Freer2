@@ -25,6 +25,9 @@ export const PROXY_URL_KEY = 'mp3freer_proxy_url';
 export const ENABLED_API_ENDPOINTS_KEY = 'mp3freer_enabled_api_endpoints';
 export const PREFERRED_QUALITY_KEY = 'mp3freer_preferred_quality';
 export const DEFAULT_QUALITY: AudioQuality = 'high';
+/** 收藏在线歌曲时是否同时下载到本地；默认关闭，仅收藏 */
+export const DOWNLOAD_ON_FAVORITE_KEY = 'mp3freer_download_on_favorite';
+export const DEFAULT_DOWNLOAD_ON_FAVORITE = false;
 
 export const API_ENDPOINTS = [
   'https://music-api.gdstudio.xyz',
@@ -107,6 +110,16 @@ export function getPreferredQuality(): AudioQuality {
 
 export function setPreferredQuality(quality: AudioQuality) {
   localStorage.setItem(PREFERRED_QUALITY_KEY, quality);
+}
+
+export function getDownloadOnFavorite(): boolean {
+  const saved = localStorage.getItem(DOWNLOAD_ON_FAVORITE_KEY);
+  if (saved === null) return DEFAULT_DOWNLOAD_ON_FAVORITE;
+  return saved === 'true';
+}
+
+export function setDownloadOnFavorite(enabled: boolean) {
+  localStorage.setItem(DOWNLOAD_ON_FAVORITE_KEY, enabled ? 'true' : 'false');
 }
 
 export function getQualityBr(quality: AudioQuality): string {

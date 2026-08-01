@@ -39,5 +39,24 @@ playlist_detail_test.json
 src-tauri/target
 src-tauri/gen/schemas
 
+# Android（init 后生成；本地签名与构建缓存勿入库）
+src-tauri/gen/android/**/build/
+src-tauri/gen/android/**/.gradle/
+src-tauri/gen/android/**/local.properties
+*.keystore
+*.jks
+
+# APK 产物（不入库）
+dist-apk/
+*.apk
+*.idsig
+
+# 临时截图/户型图（不入库）
+tmp_*.png
+装修方案/
+
+# Wiki 本地缓存
+MP3Freer2-wiki/
+
 # 辅助工具本地缓存
 .workbuddy/

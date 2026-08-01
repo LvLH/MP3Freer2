@@ -91,7 +91,40 @@ npm run tauri dev
 
 热重载开发，Vite 跑在 `http://localhost:1420`，Tauri 外壳加载该地址。
 
-### 生产构建
+### Android 构建
+
+> 支持 Android 手机/平板/车机。构建产物为 APK（arm64-v8a / armeabi-v7a）。
+
+#### 环境要求
+
+- Android Studio（含 Android SDK、NDK）
+- Java 17+
+- Rust Android 目标：`rustup target add aarch64-linux-android armv7-linux-androideabi`
+
+#### 开发模式（热重载）
+
+```bash
+npm run android:dev
+```
+
+#### 生产构建
+
+```bash
+npm run android:build
+```
+
+产物在 `src-tauri/gen/android/app/build/outputs/apk/` 下，按 `debug` 或 `release` 区分。
+
+#### 常见问题
+
+- **旧车机/低版本 WebView 报 `Unexpected token ?`**：项目已配置 `esbuild.target: "chrome80"`，若车机 WebView 更旧，可继续下调至 `"chrome70"`。构建前务必清除预构建缓存：
+  ```bash
+  Remove-Item -Recurse -Force node_modules/.vite
+  npm run android:build
+  ```
+- **横屏锁定**：默认已改为 `sensor`，支持自由旋转；如需恢复车机固定横屏，可修改 `src-tauri/gen/android/app/src/main/AndroidManifest.xml` 中的 `android:screenOrientation`。
+
+### 桌面端生产构建
 
 ```bash
 npm run tauri build
@@ -113,6 +146,7 @@ npm run dev        # 仅前端 dev server（无 Tauri 外壳，部分原生能�
 | Windows | `src-tauri/target/release/bundle/{nsis,msi}/` |
 | macOS | `src-tauri/target/release/bundle/{dmg,app}/` |
 | Linux | `src-tauri/target/release/bundle/{deb,appimage}/` |
+| Android | `src-tauri/gen/android/app/build/outputs/apk/` |
 
 ## 快捷键一览
 
@@ -208,7 +242,12 @@ MP3Freer2/
 - 用户使用本项目产生的一切行为及法律后果，由使用者本人承担。请在遵守所在地区法律法规的前提下使用。
 - 若版权权利人认为本项目存在侵权内容，请通过 issue 或邮件联系，确认后我们将及时处理。
 
-**版权鸣谢**：本项目内置的第三方音乐搜索解析 API 由 **GD音乐台 (music.gdstudio.xyz)** 强力提供，感谢原作者的无私奉献与开源精神。
+**版权鸣谢**：本项目内置的第三方音乐搜索解析 API 由以下服务提供，感谢原作者的无私奉献与开源精神：
+
+- **GD音乐台**（[music.gdstudio.xyz](https://music.gdstudio.xyz) / `music-api.gdstudio.xyz`）
+- **星之阁 API**（`api.xingzhige.com`）
+
+上述节点可在应用「关于与设置」中按需启用或关闭；接口可用性与服务条款以其提供方为准。
 
 ## 开源协议
 

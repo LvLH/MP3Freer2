@@ -28,7 +28,8 @@ export const resourceCache = {
   getUrl(source: string, songId: string, quality: string, allowExpired = false): string | null {
     const entry = urlCache.get(makeUrlKey(source, songId, quality));
     if (!entry) return null;
-    if (!allowExpired && Date.now() > entry.expireAt) return null;
+    // expireAt=0 表示永久（与 getPic 一致）；>0 时才做 TTL 判断
+    if (!allowExpired && entry.expireAt > 0 && Date.now() > entry.expireAt) return null;
     return entry.value;
   },
 

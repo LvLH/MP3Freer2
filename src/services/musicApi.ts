@@ -120,17 +120,24 @@ function firstString(...args: any[]): string {
   return '';
 }
 
-function resolveImageUrl(...args: any[]): string | null {
+/**
+ * 规范化封面 URL。
+ * Android Release 默认禁止明文 HTTP，网易等 CDN 常返回 http://，需升到 https://。
+ */
+export function resolveImageUrl(...args: any[]): string | null {
   for (const arg of args) {
     if (typeof arg === 'string' && arg.trim() !== '') {
       let url = arg.trim();
       if (url.startsWith('//y/')) {
-        url = url.replace('//y/', 'http://y');
+        url = url.replace('//y/', 'https://y');
       }
       if (url.startsWith('//')) {
         url = 'https:' + url;
       }
-      if (url.startsWith('http')) {
+      if (url.startsWith('http://')) {
+        url = 'https://' + url.slice('http://'.length);
+      }
+      if (url.startsWith('https://') || url.startsWith('data:') || url.startsWith('blob:')) {
         return url;
       }
     }
@@ -225,7 +232,7 @@ export const MusicApiService = {
           return {
             id: String(artist.id),
             name: artist.name,
-            picUrl: artist.picUrl || artist.img1v1Url || '',
+            picUrl: resolveImageUrl(artist.picUrl, artist.img1v1Url) || '',
             source: 'netease',
           };
         }
@@ -402,7 +409,9 @@ export const MusicApiService = {
           });
           if (response.ok) {
             const data = await response.json();
-            if (data?.songs?.[0]?.al?.picUrl) return data.songs[0].al.picUrl;
+            if (data?.songs?.[0]?.al?.picUrl) {
+              return resolveImageUrl(data.songs[0].al.picUrl);
+            }
           }
         } catch (e) {
           console.warn('Official getSongPic failed', e);
@@ -410,14 +419,18 @@ export const MusicApiService = {
       }
 
       const data = await postRequest('pic', { id: picId, source, size: String(size) });
-      return data?.url || null;
+      return resolveImageUrl(data?.url) || null;
     } catch (err) {
       console.error(`Get pic error (ID: ${picId}, Source: ${source}):`, err);
       return null;
     }
   },
 
-  async getPlaylistDetails(playlistId: string, isNeteaseDirect: boolean = false): Promise<PlaylistDetail | null> {
+  async getPlaylistDetails(
+    playlistId: string,
+    isNeteaseDirect: boolean = false,
+    source: string = 'netease',
+  ): Promise<PlaylistDetail | null> {
     try {
       if (isNeteaseDirect) {
         const res = await tauriFetch(`http://music.163.com/api/v6/playlist/detail?id=${playlistId}`, {
@@ -451,14 +464,14 @@ export const MusicApiService = {
         return {
           id: playlistId,
           name: playlist.name,
-          cover: playlist.coverImgUrl,
+          cover: resolveImageUrl(playlist.coverImgUrl) || '',
           creatorName: playlist.creator?.nickname || 'Official',
-          creatorAvatar: playlist.creator?.avatarUrl || '',
-          item: allSongs.map(song => mapOnlineSong({ ...song, source: 'netease' }, 'netease'))
+          creatorAvatar: resolveImageUrl(playlist.creator?.avatarUrl) || '',
+          item: allSongs.map(song => mapOnlineSong(song, 'netease'))
         };
       }
 
-      const data = await postRequest('playlist', { id: playlistId });
+      const data = await postRequest('playlist', { id: playlistId, source });
       const playlist = data?.playlist || data;
       if (!playlist) return null;
 
@@ -474,7 +487,8 @@ export const MusicApiService = {
         cover: resolveImageUrl(playlist.coverImgUrl, playlist.cover, playlist.picUrl, playlist.picture) || '',
         creatorName: firstString(playlist.creator?.nickname, playlist.creator?.name, playlist.creator),
         creatorAvatar: resolveImageUrl(playlist.creator?.avatarUrl, playlist.creatorAvatar),
-        item: tracks.map((track: any) => mapOnlineSong({ ...track, source: 'netease' }, 'netease')),
+        // 保留每首歌自己的 source；无则回退到请求时传入的 source
+        item: tracks.map((track: any) => mapOnlineSong(track, firstString(track.source, source))),
       };
     } catch (err) {
       console.error(`Get playlist details error (ID: ${playlistId}):`, err);
@@ -502,7 +516,7 @@ export const MusicApiService = {
         return data.list.slice(0, 4).map((tl: any) => ({
           id: String(tl.id),
           name: tl.name,
-          cover: tl.coverImgUrl || tl.picUrl || '',
+          cover: resolveImageUrl(tl.coverImgUrl, tl.picUrl) || '',
           creatorName: 'Official',
           creatorAvatar: '',
           playCount: tl.playCount,
@@ -520,38 +534,56 @@ export const MusicApiService = {
     return [];
   },
 
-  async getNeteaseHighQualityPlaylists(): Promise<OnlinePlaylist[]> {
+  /**
+   * 网易云精品歌单。
+   * - cat: 分类（华语/流行/电子…），默认「全部」
+   * - before: 分页游标，取上一页最后一项的 updateTime
+   * - limit: 条数，默认 40（便于前端打乱后展示一批）
+   */
+  async getNeteaseHighQualityPlaylists(options: {
+    limit?: number;
+    before?: number;
+    cat?: string;
+  } = {}): Promise<{ playlists: OnlinePlaylist[]; lastUpdateTime?: number }> {
+    const limit = options.limit ?? 40;
+    const cat = options.cat && options.cat !== '全部' ? options.cat : undefined;
     try {
       const fetchOptions: any = {
         method: 'GET',
-        headers: { 
+        headers: {
           'Referer': 'http://music.163.com',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       };
-      const response = await tauriFetch('https://music.163.com/api/playlist/highquality/list?limit=10', fetchOptions);
-      if (!response.ok) return [];
+      const url = new URL('https://music.163.com/api/playlist/highquality/list');
+      url.searchParams.set('limit', String(limit));
+      if (cat) url.searchParams.set('cat', cat);
+      if (options.before) url.searchParams.set('before', String(options.before));
+
+      const response = await tauriFetch(url.toString(), fetchOptions);
+      if (!response.ok) return { playlists: [] };
       const data = await response.json();
       if (data.code !== 200) {
         throw new Error(`Netease HighQuality API returned code: ${data.code}`);
       }
-      if (Array.isArray(data.playlists)) {
-        return data.playlists.map((pl: any) => ({
-          id: String(pl.id),
-          name: pl.name,
-          cover: pl.coverImgUrl || pl.picUrl || '',
-          creatorName: pl.creator?.nickname || 'Unknown',
-          creatorAvatar: pl.creator?.avatarUrl || '',
-          playCount: pl.playCount,
-          trackCount: pl.trackCount
-        }));
-      }
-      return [];
+      if (!Array.isArray(data.playlists)) return { playlists: [] };
+
+      const playlists = data.playlists.map((pl: any) => ({
+        id: String(pl.id),
+        name: pl.name,
+        cover: resolveImageUrl(pl.coverImgUrl, pl.picUrl) || '',
+        creatorName: pl.creator?.nickname || 'Unknown',
+        creatorAvatar: resolveImageUrl(pl.creator?.avatarUrl) || '',
+        playCount: pl.playCount,
+        trackCount: pl.trackCount,
+      }));
+      const last = data.playlists[data.playlists.length - 1];
+      const lastUpdateTime = last?.updateTime ? Number(last.updateTime) : undefined;
+      return { playlists, lastUpdateTime };
     } catch (err: any) {
       console.warn('Failed to fetch high quality playlists:', err);
       throw err;
     }
-    return [];
   },
 
   async getHotPlaylists(): Promise<OnlinePlaylist[]> {
@@ -561,7 +593,7 @@ export const MusicApiService = {
       return playlists.map((pl: any) => ({
         id: String(pl.id),
         name: pl.name || pl.title,
-        cover: resolveImageUrl(pl.cover, pl.picUrl, pl.coverImgUrl),
+        cover: resolveImageUrl(pl.cover, pl.picUrl, pl.coverImgUrl) || '',
         creatorName: pl.creator || 'Unknown',
         creatorAvatar: '',
         playCount: pl.playCount || 0,
@@ -625,7 +657,7 @@ export const MusicApiService = {
       return data.artists.map((artist: any) => ({
         id: String(artist.id),
         name: artist.name,
-        picUrl: artist.picUrl || artist.img1v1Url || '',
+        picUrl: resolveImageUrl(artist.picUrl, artist.img1v1Url) || '',
         source: 'netease',
       }));
     } catch (err: any) {
@@ -672,7 +704,7 @@ export const MusicApiService = {
             cover: resolveImageUrl(album.picUrl, album.blurPicUrl) || '',
             creatorName: firstString(album.artist?.name, '未知歌手'),
             creatorAvatar: resolveImageUrl(album.artist?.picUrl, album.artist?.img1v1Url),
-            item: songs.map((song: any) => mapOnlineSong({ ...song, source: 'netease' }, 'netease')),
+            item: songs.map((song: any) => mapOnlineSong(song, 'netease')),
           };
         }
 
@@ -691,7 +723,7 @@ export const MusicApiService = {
             cover,
             creatorName: firstString(playlist?.creator?.nickname, playlist?.creator?.name, playlist?.creator, '未知歌手'),
             creatorAvatar: resolveImageUrl(playlist?.creator?.avatarUrl, playlist?.creatorAvatar),
-            item: tracks.map((track: any) => mapOnlineSong({ ...track, source: 'netease' }, 'netease')),
+            item: tracks.map((track: any) => mapOnlineSong(track, firstString(track.source, source))),
           };
         }
         continue;

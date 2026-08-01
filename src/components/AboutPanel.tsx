@@ -7,6 +7,7 @@ import {
   DEFAULT_DOWNLOAD_PATH,
   DOWNLOAD_PATH_KEY,
   getDefaultSearchSource,
+  getDownloadOnFavorite,
   getDownloadPath,
   getEnabledApiEndpoints,
   getPreferredQuality,
@@ -15,16 +16,21 @@ import {
   QUALITY_OPTIONS,
   AudioQuality,
   setDefaultSearchSource,
+  setDownloadOnFavorite,
   setDownloadPath,
   setEnabledApiEndpoints,
   setPreferredQuality,
 } from '../settings';
+import { usePlayer } from '../context/PlayerContext';
+import { resourceCache } from '../services/cache';
 
 export const AboutPanel: React.FC = () => {
+  const { reloadCurrentSong } = usePlayer();
   const [downloadPath, setDownloadPathState] = useState<string>('');
   const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const [enabledEndpoints, setEnabledEndpointsState] = useState<string[]>([]);
   const [preferredQuality, setPreferredQualityState] = useState<AudioQuality>('high');
+  const [downloadOnFavorite, setDownloadOnFavoriteState] = useState(false);
 
   useEffect(() => {
     const savedDownloadPath = getDownloadPath();
@@ -38,18 +44,22 @@ export const AboutPanel: React.FC = () => {
     setDefaultSearchSource(savedSource);
 
     setPreferredQualityState(getPreferredQuality());
+    setDownloadOnFavoriteState(getDownloadOnFavorite());
     setEnabledEndpointsState(getEnabledApiEndpoints());
   }, []);
 
   const handleQualityChange = (quality: AudioQuality) => {
     setPreferredQualityState(quality);
     setPreferredQuality(quality);
+    resourceCache.clear();
+    reloadCurrentSong();
   };
 
   const handleClearCache = () => {
     if (confirm('确定要清空导入的本地音乐和收藏索引吗？该操作不会删除磁盘上的音乐文件。')) {
       localStorage.removeItem('mp3freer_local_songs');
       localStorage.removeItem('mp3freer_favorite_songs');
+      resourceCache.clear();
       window.location.reload();
     }
   };
@@ -156,9 +166,31 @@ export const AboutPanel: React.FC = () => {
 
           <div className="setting-row">
             <div style={{ flex: 1 }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>收藏时下载到本地</span>
+              <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
+                关闭时仅加入收藏列表；开启后，收藏在线歌曲会同时下载音频和歌词到下方目录。
+              </p>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, flexShrink: 0, cursor: 'pointer', fontSize: 13, color: 'var(--text-main)' }}>
+              <input
+                type="checkbox"
+                checked={downloadOnFavorite}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setDownloadOnFavoriteState(enabled);
+                  setDownloadOnFavorite(enabled);
+                }}
+                style={{ accentColor: '#10b981', width: 16, height: 16 }}
+              />
+              {downloadOnFavorite ? '已开启' : '已关闭'}
+            </label>
+          </div>
+
+          <div className="setting-row">
+            <div style={{ flex: 1 }}>
               <span style={{ fontWeight: 600, fontSize: 14 }}>收藏歌曲下载目录</span>
               <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                收藏在线歌曲时，会自动下载歌曲和歌词到该目录。目录不存在时会提醒并停止收藏下载。
+                仅在开启「收藏时下载到本地」后生效。目录不存在时会提醒并跳过下载（收藏仍会保留）。
               </p>
               <p style={{ color: 'var(--primary-hover)', fontSize: 11, marginTop: 6, wordBreak: 'break-all' }}>
                 {downloadPath || '未设置'}
@@ -226,7 +258,10 @@ export const AboutPanel: React.FC = () => {
           <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)' }}>
             在线解析的数据来自第三方公开网络服务，仅用于个人学习、交流和演示。软件本身不存储、分发或传播任何在线音频文件，相关资源版权归原作者所有。
             <br/><br/>
-            <b>版权鸣谢：</b> 本软件内置的第三方音乐搜索解析 API 由 <b>GD音乐台 (music.gdstudio.xyz)</b> 强力提供。感谢原作者的无私奉献与开源精神！
+            <b>版权鸣谢：</b>本软件内置的第三方音乐搜索解析 API 由以下服务提供，感谢原作者的无私奉献与开源精神：
+            <br/>• <b>GD音乐台</b>（music.gdstudio.xyz / music-api.gdstudio.xyz）
+            <br/>• <b>星之阁 API</b>（api.xingzhige.com）
+            <br/>节点可在上方设置中开关；可用性与服务条款以各提供方为准。
           </p>
         </div>
       </div>

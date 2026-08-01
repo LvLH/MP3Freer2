@@ -1,43 +1,63 @@
 // lib.rs：只负责模块声明和 Builder 配置
 // 命令函数定义在 commands.rs，避免与 generate_handler! 同文件导致 E0255 冲突
-// 系统集成（全局快捷键 + 托盘）定义在 system_integration.rs
+// 系统集成（全局快捷键 + 托盘）仅桌面启用，见 system_integration.rs
 
 mod commands;
-mod system_integration;
 
-// 2.3.2 无 init()，必须用 Builder::new().build()
-use tauri_plugin_global_shortcut::Builder as GsBuilder;
+#[cfg(desktop)]
+mod system_integration;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(GsBuilder::new().build())
-        .invoke_handler(tauri::generate_handler![
-            commands::read_audio_metadata,
-            commands::download_file,
-            commands::toggle_lyric_overlay,
-        ])
-        .setup(|app| {
-            // 初始化全局媒体键 + 托盘图标
-            if let Err(e) = system_integration::init(app.handle()) {
-                eprintln!("[系统集成] 初始化失败: {}", e);
-                // 不阻断启动，应用仍可用，只是没有全局快捷键和托盘
-            }
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            // 点击窗口关闭按钮时改为隐藏，让托盘接管，避免误退出
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    let _ = window.hide();
-                    api.prevent_close();
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_global_shortcut::Builder as GsBuilder;
+
+        tauri::Builder::default()
+            .plugin(tauri_plugin_http::init())
+            .plugin(tauri_plugin_fs::init())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_opener::init())
+            .plugin(GsBuilder::new().build())
+            .invoke_handler(tauri::generate_handler![
+                commands::read_audio_metadata,
+                commands::download_file,
+                commands::toggle_lyric_overlay,
+            ])
+            .setup(|app| {
+                if let Err(e) = system_integration::init(app.handle()) {
+                    eprintln!("[系统集成] 初始化失败: {}", e);
                 }
-            }
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+                Ok(())
+            })
+            .on_window_event(|window, event| {
+                // 点击窗口关闭按钮时改为隐藏，让托盘接管，避免误退出
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if window.label() == "main" {
+                        let _ = window.hide();
+                        api.prevent_close();
+                    }
+                }
+            })
+            .run(tauri::generate_context!())
+            .expect("error while running tauri application");
+    }
+
+    #[cfg(mobile)]
+    {
+        // Android / iOS：无托盘、无全局快捷键、无桌面歌词第二窗
+        tauri::Builder::default()
+            .plugin(tauri_plugin_http::init())
+            .plugin(tauri_plugin_fs::init())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_opener::init())
+            .invoke_handler(tauri::generate_handler![
+                commands::read_audio_metadata,
+                commands::download_file,
+                commands::toggle_lyric_overlay,
+            ])
+            .setup(|_app| Ok(()))
+            .run(tauri::generate_context!())
+            .expect("error while running tauri application");
+    }
 }

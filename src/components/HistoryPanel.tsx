@@ -1,18 +1,76 @@
-import React, { useRef, useState } from 'react';
-import { Play, Plus, Trash2, ArrowUp, Flame, Clock } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { Play, Plus, Trash2, ArrowUp, Flame, Clock, ListPlus } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import type { Song } from '../types/music';
+
+interface RecentItem {
+  song: Song;
+  playedAt: number;
+}
+
+interface TopItem {
+  song: Song;
+  playedAt: number;
+  count: number;
+}
+
+const sourceLabel = (song: Song) => {
+  if (song.isLocal) return '本地';
+  if (song.source === 'netease') return '网易云';
+  if (song.source === 'tencent') return 'QQ';
+  return song.source;
+};
 
 export const HistoryPanel: React.FC = () => {
   const {
     playHistory,
-    topPlayed,
     playSong,
+    playAll,
     addToPlaylist,
+    addAllToPlaylist,
     clearPlayHistory,
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<'recent' | 'top'>('recent');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  /** 最近播放：按歌曲去重，保留最新一次播放时间（原始流水仍留给智能歌单/年报） */
+  const recentItems = useMemo<RecentItem[]>(() => {
+    const map = new Map<string, RecentItem>();
+    for (const entry of playHistory) {
+      if (!map.has(entry.song.id)) {
+        map.set(entry.song.id, { song: entry.song, playedAt: entry.playedAt });
+      }
+    }
+    return Array.from(map.values());
+  }, [playHistory]);
+
+  /** 本周最爱：近 7 天按播放次数排序，附带次数 */
+  const topItems = useMemo<TopItem[]>(() => {
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const countMap = new Map<string, TopItem>();
+    for (const entry of playHistory) {
+      if (entry.playedAt < weekAgo) continue;
+      const existing = countMap.get(entry.song.id);
+      if (existing) {
+        existing.count += 1;
+        // playedAt 保持最新（history 新在前，首次写入即为最新）
+      } else {
+        countMap.set(entry.song.id, {
+          song: entry.song,
+          playedAt: entry.playedAt,
+          count: 1,
+        });
+      }
+    }
+    return Array.from(countMap.values())
+      .sort((a, b) => b.count - a.count || b.playedAt - a.playedAt)
+      .slice(0, 50);
+  }, [playHistory]);
+
+  const visibleSongs = activeTab === 'recent'
+    ? recentItems.map(i => i.song)
+    : topItems.map(i => i.song);
 
   const scrollToTop = () => {
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -28,11 +86,93 @@ export const HistoryPanel: React.FC = () => {
   const formatDate = (timestamp: number) => {
     const d = new Date(timestamp);
     const today = new Date();
-    const isToday = d.toDateString() === today.toDateString();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
     const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-    if (isToday) return `今天 ${time}`;
+    if (d.toDateString() === today.toDateString()) return `今天 ${time}`;
+    if (d.toDateString() === yesterday.toDateString()) return `昨天 ${time}`;
     return `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')} ${time}`;
   };
+
+  const handlePlayAll = () => {
+    if (visibleSongs.length === 0) return;
+    playAll(visibleSongs);
+  };
+
+  const handleAddAll = () => {
+    if (visibleSongs.length === 0) return;
+    addAllToPlaylist(visibleSongs);
+  };
+
+  const renderSongRow = (
+    song: Song,
+    index: number,
+    meta: { playedAt?: number; count?: number; rank?: number },
+  ) => (
+    <div
+      key={song.id}
+      className="song-row"
+      role="button"
+      tabIndex={0}
+      onClick={() => void playSong(song)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          void playSong(song);
+        }
+      }}
+      style={{ cursor: 'pointer' }}
+    >
+      <div
+        className="song-col-index"
+        style={
+          activeTab === 'recent'
+            ? { fontSize: 11, color: 'var(--text-dark)', width: 70 }
+            : {
+                color: (meta.rank ?? index) < 3 ? '#ef4444' : 'var(--text-muted)',
+                fontWeight: (meta.rank ?? index) < 3 ? 700 : 400,
+              }
+        }
+      >
+        {activeTab === 'recent'
+          ? formatDate(meta.playedAt || 0)
+          : ((meta.rank ?? index) + 1).toString().padStart(2, '0')}
+      </div>
+      <div className="song-col-info" style={{ flex: 1, minWidth: 0 }}>
+        <div className="song-title-row">
+          <span className="song-name">{song.name}</span>
+          <span className="tag-source">{sourceLabel(song)}</span>
+        </div>
+        <span className="song-artist">{song.artist}</span>
+      </div>
+      <div className="song-col-album">
+        {activeTab === 'top' && meta.count != null ? (
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+            本周 {meta.count} 次
+          </span>
+        ) : (
+          song.album
+        )}
+      </div>
+      <div className="song-col-duration">{formatTime(song.duration)}</div>
+      <div className="song-row-actions" onClick={(e) => e.stopPropagation()}>
+        <button
+          className="song-row-action-btn"
+          onClick={() => void playSong(song)}
+          title="立即播放"
+        >
+          <Play size={14} fill="currentColor" />
+        </button>
+        <button
+          className="song-row-action-btn"
+          onClick={() => addToPlaylist(song)}
+          title="添加到播放列表"
+        >
+          <Plus size={14} />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -42,20 +182,50 @@ export const HistoryPanel: React.FC = () => {
             <ArrowUp size={18} />
           </button>
           <Clock size={24} style={{ color: 'var(--primary-color)' }} />
-          <div>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <h2>播放历史</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
               {activeTab === 'recent'
-                ? `最近播放了 ${playHistory.length} 首歌`
-                : `本周最爱 Top ${topPlayed.length}`}
+                ? `最近听过 ${recentItems.length} 首 · 共 ${playHistory.length} 次播放`
+                : `本周最爱 Top ${topItems.length}`}
             </p>
           </div>
+          {visibleSongs.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <button
+                className="primary-btn"
+                onClick={handlePlayAll}
+                title={activeTab === 'recent' ? '按最近顺序播放全部' : '按本周最爱顺序播放'}
+                style={{ borderRadius: 20, padding: '0 14px', height: 32, fontSize: 13, gap: 6 }}
+              >
+                <Play size={14} fill="currentColor" />
+                <span>{activeTab === 'recent' ? '继续听' : '播放全部'}</span>
+              </button>
+              <button
+                className="icon-btn"
+                onClick={handleAddAll}
+                title="全部加入播放队列"
+                style={{
+                  borderRadius: 20,
+                  padding: '0 12px',
+                  height: 32,
+                  width: 'auto',
+                  gap: 6,
+                  background: 'rgba(255,255,255,0.05)',
+                  fontSize: 13,
+                }}
+              >
+                <ListPlus size={14} />
+                <span>加入队列</span>
+              </button>
+            </div>
+          )}
           {playHistory.length > 0 && (
             <button
               className="icon-btn"
               onClick={clearPlayHistory}
               title="清空历史"
-              style={{ marginLeft: 'auto', color: '#f87171', width: 28, height: 28, padding: 0 }}
+              style={{ color: '#f87171', width: 28, height: 28, padding: 0, flexShrink: 0 }}
             >
               <Trash2 size={14} />
             </button>
@@ -64,13 +234,23 @@ export const HistoryPanel: React.FC = () => {
 
         <div className="type-selectors" style={{ marginTop: 24 }}>
           <label className={`type-radio ${activeTab === 'recent' ? 'active' : ''}`}>
-            <input type="radio" name="historyTab" checked={activeTab === 'recent'}
-              onChange={() => setActiveTab('recent')} style={{ display: 'none' }} />
+            <input
+              type="radio"
+              name="historyTab"
+              checked={activeTab === 'recent'}
+              onChange={() => setActiveTab('recent')}
+              style={{ display: 'none' }}
+            />
             <span>最近播放</span>
           </label>
           <label className={`type-radio ${activeTab === 'top' ? 'active' : ''}`}>
-            <input type="radio" name="historyTab" checked={activeTab === 'top'}
-              onChange={() => setActiveTab('top')} style={{ display: 'none' }} />
+            <input
+              type="radio"
+              name="historyTab"
+              checked={activeTab === 'top'}
+              onChange={() => setActiveTab('top')}
+              style={{ display: 'none' }}
+            />
             <span>本周最爱</span>
           </label>
         </div>
@@ -79,53 +259,27 @@ export const HistoryPanel: React.FC = () => {
       <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 24 }}>
         <div className="glass-card" style={{ minHeight: '100%' }}>
           {activeTab === 'recent' ? (
-            playHistory.length === 0 ? (
+            recentItems.length === 0 ? (
               <div style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center',
-                justifyContent: 'center', padding: '60px 0', color: 'var(--text-muted)', gap: 12
+                justifyContent: 'center', padding: '60px 0', color: 'var(--text-muted)', gap: 12,
               }}>
                 <Clock size={48} strokeWidth={1} style={{ color: 'var(--primary-color)' }} />
                 <p style={{ fontSize: 15 }}>还没有播放记录</p>
-                <span style={{ fontSize: 11, color: 'var(--text-dark)' }}>开始播放歌曲后这里会显示记录</span>
+                <span style={{ fontSize: 11, color: 'var(--text-dark)' }}>开始播放后，点这里就能接着听</span>
               </div>
             ) : (
               <div className="song-list-container">
-                {playHistory.map((entry, index) => (
-                  <div key={`${entry.song.id}_${index}`}
-                    className="song-row"
-                    onDoubleClick={() => playSong(entry.song)}
-                  >
-                    <div className="song-col-index" style={{ fontSize: 11, color: 'var(--text-dark)', width: 70 }}>
-                      {formatDate(entry.playedAt)}
-                    </div>
-                    <div className="song-col-info" style={{ flex: 1, minWidth: 0 }}>
-                      <div className="song-title-row">
-                        <span className="song-name">{entry.song.name}</span>
-                        <span className="tag-source">
-                          {entry.song.isLocal ? '本地' : entry.song.source === 'netease' ? '网易云' : entry.song.source}
-                        </span>
-                      </div>
-                      <span className="song-artist">{entry.song.artist}</span>
-                    </div>
-                    <div className="song-col-album">{entry.song.album}</div>
-                    <div className="song-col-duration">{formatTime(entry.song.duration)}</div>
-                    <div className="song-row-actions">
-                      <button className="song-row-action-btn" onClick={() => playSong(entry.song)} title="立即播放">
-                        <Play size={14} fill="currentColor" />
-                      </button>
-                      <button className="song-row-action-btn" onClick={() => addToPlaylist(entry.song)} title="添加到播放列表">
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                {recentItems.map((item, index) =>
+                  renderSongRow(item.song, index, { playedAt: item.playedAt }),
+                )}
               </div>
             )
           ) : (
-            topPlayed.length === 0 ? (
+            topItems.length === 0 ? (
               <div style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center',
-                justifyContent: 'center', padding: '60px 0', color: 'var(--text-muted)', gap: 12
+                justifyContent: 'center', padding: '60px 0', color: 'var(--text-muted)', gap: 12,
               }}>
                 <Flame size={48} strokeWidth={1} style={{ color: '#ef4444' }} />
                 <p style={{ fontSize: 15 }}>本周最爱暂无数据</p>
@@ -133,38 +287,13 @@ export const HistoryPanel: React.FC = () => {
               </div>
             ) : (
               <div className="song-list-container">
-                {topPlayed.map((entry, index) => (
-                  <div key={entry.song.id}
-                    className="song-row"
-                    onDoubleClick={() => playSong(entry.song)}
-                  >
-                    <div className="song-col-index" style={{
-                      color: index < 3 ? '#ef4444' : 'var(--text-muted)',
-                      fontWeight: index < 3 ? 700 : 400,
-                    }}>
-                      {(index + 1).toString().padStart(2, '0')}
-                    </div>
-                    <div className="song-col-info">
-                      <div className="song-title-row">
-                        <span className="song-name">{entry.song.name}</span>
-                        <span className="tag-source">
-                          {entry.song.isLocal ? '本地' : entry.song.source === 'netease' ? '网易云' : entry.song.source}
-                        </span>
-                      </div>
-                      <span className="song-artist">{entry.song.artist}</span>
-                    </div>
-                    <div className="song-col-album">{entry.song.album}</div>
-                    <div className="song-col-duration">{formatTime(entry.song.duration)}</div>
-                    <div className="song-row-actions">
-                      <button className="song-row-action-btn" onClick={() => playSong(entry.song)} title="立即播放">
-                        <Play size={14} fill="currentColor" />
-                      </button>
-                      <button className="song-row-action-btn" onClick={() => addToPlaylist(entry.song)} title="添加到播放列表">
-                        <Plus size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                {topItems.map((item, index) =>
+                  renderSongRow(item.song, index, {
+                    playedAt: item.playedAt,
+                    count: item.count,
+                    rank: index,
+                  }),
+                )}
               </div>
             )
           )}
