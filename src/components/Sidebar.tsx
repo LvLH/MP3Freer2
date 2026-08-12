@@ -2,6 +2,8 @@ import React from 'react';
 import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History, BarChart3, Sparkles } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
+const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -42,17 +44,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
 
   return (
     <aside className="sidebar" data-tauri-drag-region>
-      <div className="window-controls">
-        <button className="window-btn minimize" onClick={handleMinimize} title="最小化">
-          <Minus size={14} />
-        </button>
-        <button className="window-btn maximize" onClick={handleMaximize} title="最大化">
-          <Square size={12} />
-        </button>
-        <button className="window-btn close" onClick={handleClose} title="关闭">
-          <X size={14} />
-        </button>
-      </div>
+      {isTauri && (
+        <div className="window-controls">
+          <button className="window-btn minimize" onClick={handleMinimize} title="最小化">
+            <Minus size={14} />
+          </button>
+          <button className="window-btn maximize" onClick={handleMaximize} title="最大化">
+            <Square size={12} />
+          </button>
+          <button className="window-btn close" onClick={handleClose} title="关闭">
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       <div className="logo-area" data-tauri-drag-region>
         <div className="logo-icon">

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists, readDir, readTextFile, writeFile } from '@tauri-apps/plugin-fs';
@@ -393,7 +394,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (song.isLocal) {
         const localPath = song.localPath || song.url || '';
-        if (localPath && await exists(localPath)) {
+        if (isTauri && localPath && await exists(localPath)) {
           playUrl = convertFileSrc(localPath);
           const localData = await loadLocalSongData({ ...song, localPath });
           lyricText = localData.lyricText;
@@ -988,7 +989,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     if (!song.isLocal && getDownloadOnFavorite()) {
       const downloadPath = getDownloadPath();
-      if (!(await directoryExists(downloadPath))) {
+      if (isTauri && !(await directoryExists(downloadPath))) {
         toast.error(`收藏下载目录不存在，请先到设置中重新选择：\n${downloadPath}`);
         return;
       }
@@ -999,7 +1000,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const lrcFileName = sanitizeFileName(`${songToSave.artist} - ${songToSave.name}.lrc`);
         const lrcPath = joinPath(downloadPath, lrcFileName);
 
-        if (!(await exists(filePath))) {
+        if (isTauri && !(await exists(filePath))) {
           const apiId = resolveOnlineApiId(song);
           let downloadUrl = resourceCache.getUrl(song.source, apiId, getPreferredQuality());
           if (!downloadUrl) {
@@ -1026,7 +1027,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (!lyricText && songToSave.lyric_id) {
           lyricText = (await MusicApiService.getSongLyric(songToSave.lyric_id, songToSave.source)).original;
         }
-        if (lyricText && !(await exists(lrcPath))) {
+        if (isTauri && lyricText && !(await exists(lrcPath))) {
           await writeFile(lrcPath, new TextEncoder().encode(lyricText));
         }
 

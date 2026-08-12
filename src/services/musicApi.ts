@@ -1,4 +1,16 @@
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+
+const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
+
+async function universalFetch(url: string, options?: any) {
+  if (isTauri) {
+    return await tauriFetch(url, options);
+  } else {
+    let proxyUrl = "/api/proxy?url=" + encodeURIComponent(url);
+    return await fetch(proxyUrl, options);
+  }
+}
+
 import { getEnabledApiEndpoints, getProxyUrl, AudioQuality, getQualityBr } from '../settings';
 
 export interface OnlineSong {
@@ -94,7 +106,7 @@ async function postRequest(types: string, extraParams: Record<string, any>): Pro
         if (proxyUrl) {
           fetchOptions.proxy = { all: proxyUrl };
         }
-        response = await tauriFetch(url.toString(), fetchOptions);
+        response = await universalFetch(url.toString(), fetchOptions);
       }
 
       if (!response.ok) {
@@ -217,7 +229,7 @@ export interface LyricData {
 export const MusicApiService = {
   async searchArtist(keyword: string): Promise<any> {
     try {
-      const response = await tauriFetch(`http://music.163.com/api/cloudsearch/pc`, {
+      const response = await universalFetch(`http://music.163.com/api/cloudsearch/pc`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -250,7 +262,7 @@ export const MusicApiService = {
         const limit = 30;
         const offset = (page - 1) * limit;
         try {
-          const response = await tauriFetch(`http://music.163.com/api/cloudsearch/pc`, {
+          const response = await universalFetch(`http://music.163.com/api/cloudsearch/pc`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
@@ -291,7 +303,7 @@ export const MusicApiService = {
       let data: any = null;
 
       try {
-        const response = await tauriFetch(`http://music.163.com/api/cloudsearch/pc`, {
+        const response = await universalFetch(`http://music.163.com/api/cloudsearch/pc`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -307,7 +319,7 @@ export const MusicApiService = {
       }
 
       if (!data || data.code !== 200) {
-        const response = await tauriFetch(`http://music.163.com/api/search/get/`, {
+        const response = await universalFetch(`http://music.163.com/api/search/get/`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -341,7 +353,7 @@ export const MusicApiService = {
         try {
           // 无损/Hi-Res 走官方 enhance 接口请求高码率
           const neteaseBr = br === '1999' || br === '999' ? '999000' : '3200000';
-          const response = await tauriFetch(`http://music.163.com/api/song/enhance/player/url?id=${songId}&ids=[${songId}]&br=${neteaseBr}`, {
+          const response = await universalFetch(`http://music.163.com/api/song/enhance/player/url?id=${songId}&ids=[${songId}]&br=${neteaseBr}`, {
             headers: { 'Referer': 'http://music.163.com' }
           });
           if (response.ok) {
@@ -369,7 +381,7 @@ export const MusicApiService = {
     try {
       if (source === 'netease') {
         try {
-          const response = await tauriFetch(`http://music.163.com/api/song/lyric?id=${lyricId}&lv=1&kv=1&tv=-1`, {
+          const response = await universalFetch(`http://music.163.com/api/song/lyric?id=${lyricId}&lv=1&kv=1&tv=-1`, {
             method: 'GET',
             headers: { 'Referer': 'http://music.163.com' }
           });
@@ -403,7 +415,7 @@ export const MusicApiService = {
     try {
       if (source === 'netease') {
         try {
-          const response = await tauriFetch(`http://music.163.com/api/song/detail/?id=${picId}&ids=[${picId}]`, {
+          const response = await universalFetch(`http://music.163.com/api/song/detail/?id=${picId}&ids=[${picId}]`, {
             method: 'GET',
             headers: { 'Referer': 'http://music.163.com' }
           });
@@ -433,7 +445,7 @@ export const MusicApiService = {
   ): Promise<PlaylistDetail | null> {
     try {
       if (isNeteaseDirect) {
-        const res = await tauriFetch(`http://music.163.com/api/v6/playlist/detail?id=${playlistId}`, {
+        const res = await universalFetch(`http://music.163.com/api/v6/playlist/detail?id=${playlistId}`, {
           method: 'POST',
           headers: { 'Referer': 'http://music.163.com' }
         });
@@ -449,7 +461,7 @@ export const MusicApiService = {
 
         let allSongs: any[] = [];
         for (const chunk of chunks) {
-          const res2 = await tauriFetch(`http://music.163.com/api/v3/song/detail`, {
+          const res2 = await universalFetch(`http://music.163.com/api/v3/song/detail`, {
             method: 'POST',
             headers: {
               'Referer': 'http://music.163.com',
@@ -505,7 +517,7 @@ export const MusicApiService = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       };
-      const response = await tauriFetch('https://music.163.com/api/toplist/detail', fetchOptions);
+      const response = await universalFetch('https://music.163.com/api/toplist/detail', fetchOptions);
       if (!response.ok) return [];
       const data = await response.json();
       if (data.code !== 200) {
@@ -560,7 +572,7 @@ export const MusicApiService = {
       if (cat) url.searchParams.set('cat', cat);
       if (options.before) url.searchParams.set('before', String(options.before));
 
-      const response = await tauriFetch(url.toString(), fetchOptions);
+      const response = await universalFetch(url.toString(), fetchOptions);
       if (!response.ok) return { playlists: [] };
       const data = await response.json();
       if (data.code !== 200) {
@@ -614,7 +626,7 @@ export const MusicApiService = {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       };
-      const response = await tauriFetch('https://music.163.com/api/personalized/newsong', fetchOptions);
+      const response = await universalFetch('https://music.163.com/api/personalized/newsong', fetchOptions);
       if (!response.ok) return [];
       const data = await response.json();
       if (data.code !== 200 || !Array.isArray(data.result)) {
@@ -647,7 +659,7 @@ export const MusicApiService = {
         },
         body: 'limit=12&offset=0&type=1&area=7'
       };
-      const response = await tauriFetch('https://music.163.com/api/artist/list', fetchOptions);
+      const response = await universalFetch('https://music.163.com/api/artist/list', fetchOptions);
       if (!response.ok) return [];
       const data = await response.json();
       if (data.code !== 200 || !Array.isArray(data.artists)) {
@@ -688,7 +700,7 @@ export const MusicApiService = {
 
     for (const { url, init } of attempts) {
       try {
-        const response = await tauriFetch(url, init || { headers: { 'Referer': 'http://music.163.com' } });
+        const response = await universalFetch(url, init || { headers: { 'Referer': 'http://music.163.com' } });
         if (!response.ok) {
           continue;
         }

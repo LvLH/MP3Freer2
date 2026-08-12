@@ -139,6 +139,7 @@ export function useShortcuts({
     let unlisten: (() => void) | undefined;
 
     const setupListener = async () => {
+      if (typeof window !== "undefined" && !(window as any).__TAURI_INTERNALS__) return;
       try {
         unlisten = await listen<string>('system-action', (event) => {
           const action = event.payload;
