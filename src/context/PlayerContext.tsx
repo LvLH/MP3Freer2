@@ -14,6 +14,13 @@ import { storage, StorageKeys } from '../services/storage';
 import { resourceCache } from '../services/cache';
 import { playbackActions } from '../services/playbackProgress';
 import { usePlaybackProgress } from '../services/playbackProgress';
+import { isAndroid, isMobileShell } from '../utils/platform';
+import {
+  updateMediaSessionMetadata,
+  updateMediaSessionPlaybackState,
+  updateMediaSessionPositionState,
+  setupMediaSessionHandlers,
+} from '../utils/mediaSession';
 import { parseLrcWithExtras } from '../utils/lyricParser';
 import {
   sanitizeFileName,
@@ -190,6 +197,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const onDurationChange = () => {
       if (audio.duration && !Number.isNaN(audio.duration)) {
         playbackActions.setDuration(audio.duration);
+        updateMediaSessionPositionState({
+          duration: audio.duration,
+          position: audio.currentTime,
+        });
       }
     };
     const onEnded = () => handleSongEnded();
@@ -275,6 +286,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // 同步歌词到桌面悬浮窗（lyric-overlay）
   useEffect(() => {
+    // 移动端/车机无悬浮窗第二窗口；后台不可见状态下跳过 IPC 广播以省电和防止卡顿
+    if (isAndroid() || isMobileShell()) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+
     const pushOverlayLyric = () => {
       const prevLine = currentLyricIndex > 0 ? lyrics[currentLyricIndex - 1]?.text || '' : '';
       const currentLine = currentLyricIndex >= 0 ? lyrics[currentLyricIndex]?.text || '' : '';
@@ -298,6 +313,16 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     window.addEventListener('desktop-lyric-sync', pushOverlayLyric);
     return () => window.removeEventListener('desktop-lyric-sync', pushOverlayLyric);
   }, [currentLyricIndex, lyrics, currentSong, isPlayingProgress]);
+
+  // 同步系统媒体会话元数据（通知栏/车机仪表盘/锁屏）
+  useEffect(() => {
+    updateMediaSessionMetadata(currentSong);
+  }, [currentSong]);
+
+  // 同步系统媒体会话播放状态
+  useEffect(() => {
+    updateMediaSessionPlaybackState(isPlayingProgress);
+  }, [isPlayingProgress]);
 
   useEffect(() => {
     storage.setString(StorageKeys.CURRENT_PLAYINDEX, String(playIndex));
@@ -827,6 +852,30 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       playbackActions.setCurrentTime(time);
     }
   };
+
+  // 注册系统级媒体控制事件（车机方向盘、通知栏控制器、蓝牙按键）
+  useEffect(() => {
+    const cleanup = setupMediaSessionHandlers({
+      onPlay: () => {
+        const audio = audioRef.current;
+        if (audio && audio.src) {
+          playIntentRef.current = true;
+          audio.play().catch(console.error);
+        }
+      },
+      onPause: () => {
+        const audio = audioRef.current;
+        if (audio) {
+          playIntentRef.current = false;
+          audio.pause();
+        }
+      },
+      onNext: () => nextSong(),
+      onPrev: () => prevSong(),
+      onSeek: (time: number) => seekTo(time),
+    });
+    return cleanup;
+  }, [nextSong, prevSong]);
 
   const setVolumeLevel = (vol: number) => {
     const safeVol = Math.max(0, Math.min(1, vol));

@@ -53,9 +53,11 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
     };
   }, [isPlaylistOpen, isOpen, onClose]);
 
-  // 当歌词行改变时，平滑滚动让当前行保持在容器中央
+  // 当歌词行改变时，平滑滚动让当前行保持在容器中央（后台时跳过以省电防卡顿）
   useEffect(() => {
     if (!isOpen || !containerRef.current || currentLyricIndex < 0) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+
     // 用 rAF 确保在 DOM 更新（active class 切换）之后再滚动，
     // 避免 querySelector 找到的是旧的 active 元素
     const raf = requestAnimationFrame(() => {
@@ -70,18 +72,32 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
     return () => cancelAnimationFrame(raf);
   }, [currentLyricIndex, isOpen, lyrics]);
 
-  // 当面板第一次打开时，也滚动到正确位置
+  // 当面板第一次打开或从后台切换回前台时，滚动到正确位置
   useEffect(() => {
     if (!isOpen) return;
-    const timer = setTimeout(() => {
+
+    const scrollToActive = () => {
       if (!containerRef.current || currentLyricIndex < 0) return;
       const activeEl = containerRef.current.querySelector('.lyric-line.active') as HTMLElement;
       if (!activeEl) return;
       const targetTop = activeEl.offsetTop - containerRef.current.clientHeight / 2 + activeEl.clientHeight / 2;
       containerRef.current.scrollTo({ top: targetTop, behavior: 'smooth' });
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [isOpen]);
+    };
+
+    const timer = setTimeout(scrollToActive, 300);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isOpen) {
+        scrollToActive();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isOpen, currentLyricIndex]);
 
   const defaultCover = defaultCoverIcon;
 

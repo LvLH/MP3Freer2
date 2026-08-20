@@ -1,4 +1,4 @@
-﻿/* 全局重置与变量定�?*/
+/* 全局重置与变量定�?*/
 :root {
   --bg-gradient: linear-gradient(135deg, #0f0c1b 0%, #15102a 50%, #0a0813 100%);
   --glass-bg: rgba(255, 255, 255, 0.03);
@@ -36,7 +36,7 @@ body {
   width: 100vw;
 }
 
-/* 隐藏滚动�?*/
+/* 隐藏滚动条 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -1965,114 +1965,113 @@ body.is-car-landscape .sidebar {
     padding-bottom: 8px;
   }
 }
- 
- / *   - - - - - - - - - - - - - - - - - - - - - - -   * /  
- / *   M o b i l e   R e s p o n s i v e   S e t u p   * /  
- / *   - - - - - - - - - - - - - - - - - - - - - - -   * /  
- @ m e d i a   ( m a x - w i d t h :   7 6 8 p x )   {  
-     . a p p - c o n t a i n e r   {  
-         f l e x - d i r e c t i o n :   c o l u m n ;  
-     }  
-  
-     . s i d e b a r   {  
-         p o s i t i o n :   f i x e d ;  
-         b o t t o m :   v a r ( - - p l a y e r - h e i g h t ) ;  
-         l e f t :   0 ;  
-         w i d t h :   1 0 0 v w ;  
-         h e i g h t :   6 0 p x ;  
-         f l e x - d i r e c t i o n :   r o w ;  
-         p a d d i n g :   0 ;  
-         j u s t i f y - c o n t e n t :   s p a c e - a r o u n d ;  
-         a l i g n - i t e m s :   c e n t e r ;  
-         b o r d e r - r i g h t :   n o n e ;  
-         b o r d e r - t o p :   1 p x   s o l i d   v a r ( - - g l a s s - b o r d e r ) ;  
-         z - i n d e x :   9 9 ;  
-     }  
-  
-     . l o g o - a r e a ,   . w i n d o w - c o n t r o l s   {  
-         d i s p l a y :   n o n e   ! i m p o r t a n t ;  
-     }  
-  
-     . n a v - m e n u   {  
-         f l e x - d i r e c t i o n :   r o w ;  
-         w i d t h :   1 0 0 % ;  
-         j u s t i f y - c o n t e n t :   s p a c e - a r o u n d ;  
-     }  
-  
-     . n a v - i t e m   {  
-         f l e x - d i r e c t i o n :   c o l u m n ;  
-         p a d d i n g :   8 p x ;  
-         g a p :   4 p x ;  
-         f o n t - s i z e :   1 0 p x ;  
-         b o r d e r :   n o n e   ! i m p o r t a n t ;  
-         b a c k g r o u n d :   t r a n s p a r e n t   ! i m p o r t a n t ;  
-         b o x - s h a d o w :   n o n e   ! i m p o r t a n t ;  
-     }  
-  
-     . n a v - i t e m   s p a n   {  
-         d i s p l a y :   n o n e ;  
-     }  
-  
-     . m a i n - c o n t e n t   {  
-         w i d t h :   1 0 0 v w ;  
-         h e i g h t :   c a l c ( 1 0 0 v h   -   v a r ( - - p l a y e r - h e i g h t )   -   6 0 p x ) ;  
-         f l e x :   n o n e ;  
-         p a d d i n g :   1 6 p x ;  
-     }  
-  
-     . p l a y e r - b a r   {  
-         p a d d i n g :   0   1 2 p x ;  
-     }  
-     . p l a y e r - l e f t   {  
-         w i d t h :   a u t o ;  
-         f l e x :   1 ;  
-     }  
-     . p l a y e r - t i t l e   {  
-         m a x - w i d t h :   1 2 0 p x ;  
-     }  
-     . p l a y e r - c e n t e r   {  
-         w i d t h :   a u t o ;  
-     }  
-     . p l a y e r - c o n t r o l s   {  
-         g a p :   1 2 p x ;  
-     }  
-     . p r o g r e s s - c o n t a i n e r   {  
-         d i s p l a y :   n o n e ;  
-     }  
-     . p l a y e r - r i g h t   {  
-         d i s p l a y :   n o n e ;  
-     }  
-  
-     . p l a y l i s t - g r i d   {  
-         g r i d - t e m p l a t e - c o l u m n s :   r e p e a t ( a u t o - f i l l ,   m i n m a x ( 1 1 0 p x ,   1 f r ) ) ;  
-         g a p :   1 2 p x ;  
-     }  
-  
-     . s o n g - r o w   {  
-         p a d d i n g :   8 p x   1 2 p x ;  
-     }  
-     . s o n g - c o l - a l b u m ,   . s o n g - c o l - d u r a t i o n   {  
-         d i s p l a y :   n o n e ;  
-     }  
-     . s o n g - n a m e ,   . s o n g - a r t i s t   {  
-         m a x - w i d t h :   2 0 0 p x ;  
-     }  
-     . s o n g - r o w - a c t i o n s   {  
-         d i s p l a y :   n o n e ;  
-     }  
-  
-     . l y r i c - l e f t - h a l f   {  
-         d i s p l a y :   n o n e ;  
-     }  
-     . l y r i c - r i g h t - h a l f   {  
-         w i d t h :   1 0 0 v w   ! i m p o r t a n t ;  
-         p a d d i n g :   2 4 p x ;  
-     }  
-     . l y r i c - l i n e   {  
-         f o n t - s i z e :   1 6 p x   ! i m p o r t a n t ;  
-     }  
-     . l y r i c - l i n e . a c t i v e   {  
-         f o n t - s i z e :   2 0 p x   ! i m p o r t a n t ;  
-     }  
- }  
- 
+
+/* ------------------------------------------- */
+/* Mobile Responsive Setup                     */
+/* ------------------------------------------- */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: fixed;
+    bottom: var(--player-height);
+    left: 0;
+    width: 100vw;
+    height: 60px;
+    flex-direction: row;
+    padding: 0;
+    justify-content: space-around;
+    align-items: center;
+    border-right: none;
+    border-top: 1px solid var(--glass-border);
+    z-index: 99;
+  }
+
+  .logo-area, .window-controls {
+    display: none !important;
+  }
+
+  .nav-menu {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+  }
+
+  .nav-item {
+    flex-direction: column;
+    padding: 8px;
+    gap: 4px;
+    font-size: 10px;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .nav-item span {
+    display: none;
+  }
+
+  .main-content {
+    width: 100vw;
+    height: calc(100vh - var(--player-height) - 60px);
+    flex: none;
+    padding: 16px;
+  }
+
+  .player-bar {
+    padding: 0 12px;
+  }
+  .player-left {
+    width: auto;
+    flex: 1;
+  }
+  .player-title {
+    max-width: 120px;
+  }
+  .player-center {
+    width: auto;
+  }
+  .player-controls {
+    gap: 12px;
+  }
+  .progress-container {
+    display: none;
+  }
+  .player-right {
+    display: none;
+  }
+
+  .playlist-grid {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+  }
+
+  .song-row {
+    padding: 8px 12px;
+  }
+  .song-col-album, .song-col-duration {
+    display: none;
+  }
+  .song-name, .song-artist {
+    max-width: 200px;
+  }
+  .song-row-actions {
+    display: none;
+  }
+
+  .lyric-left-half {
+    display: none;
+  }
+  .lyric-right-half {
+    width: 100vw !important;
+    padding: 24px;
+  }
+  .lyric-line {
+    font-size: 16px !important;
+  }
+  .lyric-line.active {
+    font-size: 20px !important;
+  }
+}

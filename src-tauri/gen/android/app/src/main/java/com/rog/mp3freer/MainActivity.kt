@@ -18,11 +18,16 @@ class MainActivity : TauriActivity() {
       // ignore
     }
 
-    // 比亚迪等车机 GPU + 旧 WebView 硬件合成时常整页空白，改软件层绘制
+    // 比亚迪等车机 GPU + 旧 WebView 硬件合成时常整页空白，改软件层绘制；配置媒体后台流畅播放
     Handler(Looper.getMainLooper()).postDelayed({
       val wv = findWebView(window.decorView) ?: return@postDelayed
       wv.setBackgroundColor(0xFF0F0A1A.toInt())
       wv.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+      try {
+        wv.settings.mediaPlaybackRequiresUserGesture = false
+      } catch (_: Throwable) {
+        // ignore
+      }
     }, 200)
   }
 
