@@ -14,15 +14,15 @@ val tauriProperties = Properties().apply {
 }
 
 android {
-    compileSdk = 36
-    buildToolsVersion = "36.0.0"
+    compileSdk = 34
+    buildToolsVersion = "34.0.0"
     namespace = "com.rog.mp3freer"
     defaultConfig {
         // 部分音源/CDN 仍可能回落 http；封面与流媒体需允许明文（与 debug 一致）
         manifestPlaceholders["usesCleartextTraffic"] = "true"
         applicationId = "com.rog.mp3freer"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
