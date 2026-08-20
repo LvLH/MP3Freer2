@@ -277,19 +277,22 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
             <Music size={20} style={{ color: '#3b82f6' }} />
             <h2 style={{ fontSize: 18, margin: 0 }}>新歌速递</h2>
           </div>
-          <div className="song-list-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+          <div className="song-list-container discovery-newsong-grid">
             {newSongs.map((song) => (
               <div 
                 key={song.id} 
-                className="song-row" 
-                style={{ padding: '8px 12px', borderRadius: 8, cursor: 'pointer', background: 'rgba(255,255,255,0.03)' }}
+                className="song-row discovery-song-row"
                 onClick={() => handlePlaySong(song)}
               >
+                <CoverImage src={song.pic || ''} alt="" className="discovery-song-cover" />
                 <div className="song-col-info" style={{ flex: 1, minWidth: 0 }}>
                   <div className="song-title-row">
                     <span className="song-name" style={{ fontSize: 14 }}>{song.name}</span>
                   </div>
                   <span className="song-artist" style={{ fontSize: 12 }}>{song.artist}</span>
+                </div>
+                <div className="discovery-play-icon">
+                  <Play size={15} fill="currentColor" />
                 </div>
               </div>
             ))}

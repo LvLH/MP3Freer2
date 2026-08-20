@@ -376,8 +376,8 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="glass-card" style={{ flexShrink: 0 }}>
         <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="search-bar-row" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button type="button" className="back-to-top-btn" onClick={scrollToTop} title="回到顶部" style={{ flexShrink: 0 }}>
+          <div className="search-bar-row">
+            <button type="button" className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
               <ArrowUp size={18} />
             </button>
             <div className="search-input-wrap">
@@ -397,7 +397,6 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                     setActiveKeyword('');
                   }
                 }}
-                style={{ height: 40 }}
               />
               {keyword.length > 0 && (
                 <button
@@ -418,9 +417,8 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                 </button>
               )}
             </div>
-            <button type="submit" className="primary-btn" disabled={loading} style={{ height: 40, padding: '0 20px' }}>
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-              <span>{TEXT.search}</span>
+            <button type="submit" className="primary-btn search-submit-btn" disabled={loading} title={TEXT.search} aria-label={TEXT.search}>
+              {loading ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
             </button>
           </div>
 

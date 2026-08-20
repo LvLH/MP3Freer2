@@ -154,6 +154,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const playIntentRef = useRef<boolean>(false);
   /** 为 true 时忽略 audio 的 pause 事件同步（切歌 pause/load 期间） */
   const suppressPauseSyncRef = useRef<boolean>(false);
+  /** 本次播放结束已被处理（ended 或 timeupdate 兜底先到者置位），
+   *  防止 ended 事件与 timeupdate 兜底重复触发 handleSongEnded。
+   *  切歌（loadSongDetails 开头）复位为 false，单曲循环 play() 成功后也复位。 */
+  const endedGuardRef = useRef<boolean>(false);
   /** 收藏下载会话 token：取消收藏时递增，避免下载完成后把歌重新写回 */
   const favoriteDownloadTokenRef = useRef<Map<string, number>>(new Map());
 
@@ -193,7 +197,19 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // 之前接 WebAudio（createMediaElementSource）导致一系列 user gesture / suspended 问题，
     // 声音是底线，频谱改为模拟律动（见 SpectrumVisualizer）。
 
-    const onTimeUpdate = () => playbackActions.setCurrentTime(audio.currentTime);
+    const onTimeUpdate = () => {
+      playbackActions.setCurrentTime(audio.currentTime);
+      // Android WebView 下隐藏/不可见的 <audio> 在自然播放结束时 ended 事件可能丢失，
+      // 用 timeupdate 兜底：接近末尾且本次未处理过结束时主动连播。
+      // endedGuardRef 由 handleSongEnded 置位、loadSongDetails 切歌时复位，
+      // 保证 ended 与兜底谁先到都只触发一次。
+      if (!endedGuardRef.current
+        && audio.duration && !Number.isNaN(audio.duration)
+        && audio.duration > 1
+        && audio.currentTime >= audio.duration - 0.3) {
+        handleSongEnded();
+      }
+    };
     const onDurationChange = () => {
       if (audio.duration && !Number.isNaN(audio.duration)) {
         playbackActions.setDuration(audio.duration);
@@ -375,6 +391,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const loadSongDetails = async (song: Song) => {
     const audio = audioRef.current;
     if (!audio) return;
+
+    // 切到新歌加载：解除上一首的结束保护，允许本次播放自然结束时重新触发连播
+    endedGuardRef.current = false;
 
     if (autoSkipTimerRef.current) {
       clearTimeout(autoSkipTimerRef.current);
@@ -586,13 +605,21 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const handleSongEnded = () => {
+    // ended 事件与 timeupdate 兜底都可能调用此函数，用 guard 保证只处理一次
+    if (endedGuardRef.current) return;
+    endedGuardRef.current = true;
     playIntentRef.current = true;
     if (playModeRef.current === 'single-loop') {
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
         isPlayingRef.current = true;
         playbackActions.setIsPlaying(true);
-        audioRef.current.play().catch(console.error);
+        audioRef.current.play()
+          .catch(console.error)
+          .finally(() => {
+            // 重新播放后解除 guard，允许下次自然结束再次触发
+            endedGuardRef.current = false;
+          });
       }
       return;
     }
@@ -614,7 +641,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           playIntentRef.current = true;
           isPlayingRef.current = true;
           playbackActions.setIsPlaying(true);
-          audio.play().catch(console.error);
+          audio.play()
+            .catch(console.error)
+            .finally(() => {
+              // 重播后解除 guard，允许下次自然结束再次触发（此路径不经 loadSongDetails）
+              endedGuardRef.current = false;
+            });
         });
       }
 
@@ -1322,8 +1354,10 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       toggleShowTranslation,
       analyser,
     }}>
-      {/* 不设 crossOrigin：在线 CDN 常无 CORS，会导致 Android/WebView 无声或无法解码 */}
-      <audio ref={audioRef} style={{ display: 'none' }} preload="auto" />
+      {/* 不设 crossOrigin：在线 CDN 常无 CORS，会导致 Android/WebView 无声或无法解码。
+          不用 display:none：Android WebView 会把不可见媒体元素节流，导致 ended 事件丢失、
+          播放结束不连播。改用屏幕外 1px 视觉隐藏，元素仍参与渲染/不被节流。 */}
+      <audio ref={audioRef} preload="auto" style={{ position: 'fixed', left: '-9999px', top: '-9999px', width: '1px', height: '1px', opacity: '0' }} />
       {children}
     </PlayerContext.Provider>
   );

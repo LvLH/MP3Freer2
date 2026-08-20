@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Play, Trash2, Music, X, ArrowUp } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { isMobileShell } from '../utils/platform';
 
 export const PlaylistPanel: React.FC = () => {
   const { playlist, currentSong, playSong, removeFromPlaylist, clearPlaylist } = usePlayer();
@@ -70,7 +71,8 @@ export const PlaylistPanel: React.FC = () => {
                 <div 
                   key={song.id} 
                   className={`song-row ${currentSong?.id === song.id ? 'active' : ''}`}
-                  onDoubleClick={() => playSong(song)}
+                  onClick={isMobileShell() ? () => playSong(song) : undefined}
+                  onDoubleClick={isMobileShell() ? undefined : () => playSong(song)}
                 >
                   <div className="song-col-index">
                     {currentSong?.id === song.id ? (

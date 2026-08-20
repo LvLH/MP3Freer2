@@ -529,6 +529,7 @@ body {
 .search-bar-row {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 .search-input-wrap {
   position: relative;
@@ -597,6 +598,15 @@ body {
   opacity: 0.9;
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(168, 85, 247, 0.35);
+}
+
+/* 搜索提交按钮：仅图标（不带"搜索"文字），固定方形图标按钮，44px 触控目标 */
+.search-submit-btn {
+  padding: 0;
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .source-selectors {
@@ -1988,7 +1998,7 @@ body.is-car-landscape .sidebar {
 /* ------------------------------------------- */
 @media (max-width: 768px) {
   :root {
-    --player-height: 56px;
+    --player-height: 64px;
     --mobile-nav-height: 56px;
   }
 
@@ -2097,17 +2107,29 @@ body.is-car-landscape .sidebar {
     justify-content: space-between;
   }
 
-  /* 迷你播放条顶部 2px 极细进度条 */
+  /* 迷你播放条顶部进度条：加粗到 3px 并可点击粗调进度 */
   .mobile-player-progress-bg {
     display: block !important;
     position: absolute;
     top: 0;
     left: 10px;
     right: 10px;
-    height: 2px;
+    height: 3px;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 2px;
-    overflow: hidden;
+    overflow: visible;
+    cursor: pointer;
+    z-index: 3;
+  }
+
+  /* 扩大进度条点击热区（上下各延伸 8px），小屏也能精准点中 */
+  .mobile-player-progress-bg::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -8px;
+    bottom: -8px;
   }
 
   .mobile-player-progress-fill {
@@ -2126,15 +2148,15 @@ body.is-car-landscape .sidebar {
   }
 
   .player-cover-container {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     flex-shrink: 0;
   }
 
   .player-cover {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
   }
 
   .player-info {
@@ -2172,21 +2194,44 @@ body.is-car-landscape .sidebar {
   }
 
   .player-controls .control-btn {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
     padding: 0;
   }
 
   .player-controls .control-btn.play-pause {
-    width: 38px;
-    height: 38px;
+    width: 52px;
+    height: 52px;
     background: var(--primary-gradient);
     color: #fff;
+    border-radius: 50%;
+    box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4);
   }
 
-  .progress-container,
-  .player-right {
+  /* 移动端迷你条隐藏 prev，保留 play/next（prev 进全屏页操作，减少拥挤） */
+  .player-controls .mobile-hide-btn {
     display: none !important;
+  }
+
+  .progress-container {
+    display: none !important;
+  }
+
+  /* 移动端 player-right 只保留收藏按钮（mobile-keep-btn），播放模式/歌词/音量隐藏 */
+  .player-right {
+    display: flex !important;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .player-right .mobile-hide-btn {
+    display: none !important;
+  }
+
+  .player-right .mobile-keep-btn {
+    width: 44px;
+    height: 44px;
   }
 
   /* ---------------- 中间主内容滚动区 ---------------- */
@@ -2262,24 +2307,34 @@ body.is-car-landscape .sidebar {
   .song-row {
     display: flex !important;
     align-items: center;
-    padding: 10px 8px;
-    gap: 10px;
+    padding: 11px 8px;
+    gap: 8px;
     border-radius: 10px;
   }
 
   .song-col-index {
-    width: 28px;
-    font-size: 13px;
+    width: 24px;
+    font-size: 12px;
     color: var(--text-muted);
     text-align: center;
     flex-shrink: 0;
   }
 
+  /* 关键修复：组件用 song-col-info，须给它收缩能力。
+     此前只定义了 song-row-main-info（组件未使用），导致歌名区在小屏无法收缩、一行展示不全 */
+  .song-col-info,
   .song-row-main-info {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .song-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
   }
 
@@ -2290,6 +2345,16 @@ body.is-car-landscape .sidebar {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  .tag-hires {
+    flex-shrink: 0;
+  }
+
+  /* 小屏隐藏来源 tag，减少横向噪音，只保留 Hi-Res 标识 */
+  .tag-source {
+    display: none;
   }
 
   .song-artist {
@@ -2306,24 +2371,24 @@ body.is-car-landscape .sidebar {
     display: none !important;
   }
 
-  /* 恢复手机端单曲操作按钮（收藏、加歌单） */
+  /* 操作按钮 44px 触控目标（拇指热区），小屏更易点 */
   .song-row-actions {
     display: flex !important;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
     opacity: 1 !important;
   }
 
   .song-row-action-btn {
-    width: 34px !important;
-    height: 34px !important;
+    width: 44px !important;
+    height: 44px !important;
     padding: 0 !important;
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
+    border-radius: 10px;
     border: none;
     color: var(--text-muted);
   }
@@ -2571,6 +2636,28 @@ body.is-car-landscape .sidebar {
     font-size: 12px !important;
   }
 
+  /* 移动端搜索栏：全宽输入框 + 图标搜索按钮。
+     "回到顶部"按钮在小屏与搜索框挤一行、浪费横向空间，隐藏后搜索框占满 */
+  .search-bar-row {
+    gap: 10px;
+  }
+
+  .back-to-top-btn {
+    display: none;
+  }
+
+  .search-input-wrap .input-field {
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .search-submit-btn {
+    width: 44px !important;
+    height: 44px !important;
+    padding: 0 !important;
+    border-radius: 12px;
+  }
+
   /* ---------------- 移动端全局触控反馈与 60~120fps GPU 渲染 ---------------- */
   .mobile-nav-menu .nav-item:active,
   .control-btn:active,
@@ -2595,6 +2682,82 @@ body.is-car-landscape .sidebar {
     will-change: scroll-position;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ============ 超小屏手机（≤400px）进一步释放歌名区横向空间 ============ */
+@media (max-width: 400px) {
+  /* 隐藏序号列，把空间全部让给歌名/歌手 */
+  .song-col-index {
+    display: none !important;
+  }
+
+  /* 序号隐藏后歌名区从列表最左开始，补一点左内边距 */
+  .song-row {
+    padding-left: 12px;
+  }
+}
+
+/* ============ 发现页新歌速递：封面缩略图行 ============ */
+.discovery-newsong-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+.discovery-song-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.2s ease;
+}
+
+.discovery-song-row:hover {
+  background: var(--glass-bg-hover);
+}
+
+.discovery-song-cover {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.discovery-play-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-radius: 50%;
+  transition: color 0.2s, background 0.2s;
+}
+
+.discovery-song-row:hover .discovery-play-icon {
+  color: var(--primary-hover);
+  background: rgba(168, 85, 247, 0.12);
+}
+
+@media (max-width: 768px) {
+  /* 小屏新歌单列，封面行更清晰；封面与播放图标加大 */
+  .discovery-newsong-grid {
+    grid-template-columns: 1fr;
+  }
+  .discovery-song-cover {
+    width: 48px;
+    height: 48px;
+  }
+  .discovery-play-icon {
+    width: 44px;
+    height: 44px;
   }
 }
 

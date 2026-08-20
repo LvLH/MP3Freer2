@@ -98,8 +98,15 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
 
   return (
     <div className="player-bar">
-      {/* 移动端极简顶部进度指示条 */}
-      <div className="mobile-player-progress-bg">
+      {/* 移动端极简顶部进度指示条（点击可粗调进度，不必进全屏页） */}
+      <div
+        className="mobile-player-progress-bg"
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+          if (duration > 0) seekTo(ratio * duration);
+        }}
+      >
         <div
           className="mobile-player-progress-fill"
           style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
@@ -150,7 +157,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
       {/* 中间：播放控制与进度条 */}
       <div className="player-center">
         <div className="player-controls">
-          <button className="control-btn" onClick={prevSong} title="上一首">
+          <button className="control-btn mobile-hide-btn" onClick={prevSong} title="上一首">
             <SkipBack size={20} fill="currentColor" />
           </button>
 
@@ -204,7 +211,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
       {/* 右侧：音量与功能 */}
       <div className="player-right">
         <button
-          className={`control-btn ${currentSong && isFavorite(currentSong.id) ? 'favorited' : ''}`}
+          className={`control-btn mobile-keep-btn ${currentSong && isFavorite(currentSong.id) ? 'favorited' : ''}`}
           onClick={handleFavorite}
           title="收藏"
           style={{ color: currentSong && isFavorite(currentSong.id) ? '#ef4444' : undefined }}
@@ -212,7 +219,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
           <Heart size={16} fill={currentSong && isFavorite(currentSong.id) ? '#ef4444' : 'none'} />
         </button>
 
-        <button className="control-btn" onClick={changePlayMode} title={getPlayModeTitle()}>
+        <button className="control-btn mobile-hide-btn" onClick={changePlayMode} title={getPlayModeTitle()}>
           {playMode === 'single-loop' && <Repeat size={16} className="text-purple" />}
           {playMode === 'random' && <Shuffle size={16} />}
           {playMode === 'list-loop' && <RefreshCw size={16} />}
@@ -230,11 +237,11 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
           </button>
         )}
 
-        <button className="control-btn" onClick={onToggleFullscreen} title="歌词面板">
+        <button className="control-btn mobile-hide-btn" onClick={onToggleFullscreen} title="歌词面板">
           <Maximize2 size={16} />
         </button>
 
-        <div className="volume-container">
+        <div className="volume-container mobile-hide-btn">
           <button className="control-btn" onClick={toggleMute} title="静音切换">
             {volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
           </button>
