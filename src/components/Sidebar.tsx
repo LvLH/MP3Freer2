@@ -65,7 +65,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
         <span className="logo-title">MP3Freer</span>
       </div>
 
-      <ul className="nav-menu">
+      {/* 桌面与车机宽屏导航列表 */}
+      <ul className="nav-menu desktop-nav-menu">
         {menuItems.map(item => {
           const IconComponent = item.icon;
           return (
@@ -81,8 +82,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
         })}
       </ul>
       
-      <div style={{ flex: 1 }} />
-      <ul className="nav-menu" style={{ marginBottom: 16 }}>
+      <div style={{ flex: 1 }} className="desktop-spacer" />
+      <ul className="nav-menu desktop-nav-menu" style={{ marginBottom: 16 }}>
         <li
           className="nav-item"
           onClick={onOpenReport}
@@ -98,6 +99,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
         >
           <Keyboard size={18} />
           <span>快捷键</span>
+        </li>
+      </ul>
+
+      {/* 移动端专属 4 核心 Tab 底部栏 */}
+      <ul className="nav-menu mobile-nav-menu">
+        <li
+          className={`nav-item ${activeTab === 'search' ? 'active' : ''}`}
+          onClick={() => setActiveTab('search')}
+        >
+          <Search size={20} />
+          <span>发现</span>
+        </li>
+        <li
+          className={`nav-item ${['my', 'local', 'favorites', 'history', 'smart'].includes(activeTab) ? 'active' : ''}`}
+          onClick={() => setActiveTab('my')}
+        >
+          <Music size={20} />
+          <span>我的</span>
+        </li>
+        <li
+          className={`nav-item ${activeTab === 'playlist' ? 'active' : ''}`}
+          onClick={() => setActiveTab('playlist')}
+        >
+          <ListMusic size={20} />
+          <span>队列</span>
+        </li>
+        <li
+          className={`nav-item ${activeTab === 'about' ? 'active' : ''}`}
+          onClick={() => setActiveTab('about')}
+        >
+          <Settings size={20} />
+          <span>设置</span>
         </li>
       </ul>
     </aside>

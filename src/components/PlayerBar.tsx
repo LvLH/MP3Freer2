@@ -98,9 +98,17 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
 
   return (
     <div className="player-bar">
+      {/* 移动端极简顶部进度指示条 */}
+      <div className="mobile-player-progress-bg">
+        <div
+          className="mobile-player-progress-fill"
+          style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+        />
+      </div>
+
       {/* 左侧：歌曲信息 */}
-      <div className="player-left">
-        <div className="player-cover-container" onClick={onToggleFullscreen} title="点击展开全屏歌词">
+      <div className="player-left" onClick={onToggleFullscreen} style={{ cursor: 'pointer' }}>
+        <div className="player-cover-container" title="点击展开全屏歌词">
           {(currentSong?.pic && !imageError) ? (
             <img
               src={currentSong.pic.startsWith('http://')

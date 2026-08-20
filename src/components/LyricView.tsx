@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ListMusic, SkipBack, SkipForward } from 'lucide-react';
+import { ChevronDown, ListMusic, SkipBack, SkipForward, Play, Pause } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
 import defaultCoverIcon from '../assets/default-cover.png';
@@ -122,8 +122,26 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
         style={{ backgroundImage: `url(${songCover})` }}
       ></div>
 
-      {/* 关闭按钮 */}
-      <button className="close-lyric-btn" onClick={onClose} title="收起歌词">
+      {/* 移动端顶部标题栏 */}
+      <div className="mobile-lyric-header">
+        <button className="mobile-lyric-back-btn" onClick={onClose} title="收起歌词">
+          <ChevronDown size={26} />
+        </button>
+        <div className="mobile-lyric-title-info">
+          <div className="mobile-lyric-song-name">{currentSong?.name || '未知曲目'}</div>
+          <div className="mobile-lyric-song-artist">{currentSong?.artist || '未知歌手'}</div>
+        </div>
+        <button 
+          className="mobile-lyric-queue-btn"
+          onClick={() => setIsPlaylistOpen(prev => !prev)}
+          title="播放队列"
+        >
+          <ListMusic size={22} />
+        </button>
+      </div>
+
+      {/* PC 端传统关闭按钮 */}
+      <button className="close-lyric-btn desktop-only-btn" onClick={onClose} title="收起歌词">
         <ChevronDown size={24} />
       </button>
 
@@ -252,6 +270,82 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
 
 
 
+        {/* 移动端专属底部控制栏 */}
+        <div className="mobile-lyric-bottom-bar">
+          <div className="mobile-lyric-progress-wrap">
+            <span className="mobile-time-text">{formatSecs(currentTime)}</span>
+            <div className="slider-bar" style={{ flex: 1 }}>
+              <input
+                type="range"
+                min={0}
+                max={duration || 100}
+                step={0.1}
+                value={currentTime}
+                onChange={handleSeek}
+                style={{
+                  position: 'absolute',
+                  width: '100%',
+                  height: '100%',
+                  opacity: 0,
+                  cursor: 'pointer',
+                  left: 0,
+                  top: 0,
+                  zIndex: 2
+                }}
+              />
+              <div
+                className="slider-fill"
+                style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+              />
+              <div
+                className="slider-thumb"
+                style={{ left: `${(currentTime / (duration || 1)) * 100}%` }}
+              />
+            </div>
+            <span className="mobile-time-text">{formatSecs(duration)}</span>
+          </div>
+
+          <div className="mobile-lyric-btns">
+            <button className="mobile-lyric-ctrl-btn" onClick={prevSong} title="上一首">
+              <SkipBack size={24} />
+            </button>
+            <button className="mobile-lyric-play-btn" onClick={togglePlay} title={isPlaying ? '暂停' : '播放'}>
+              {isPlaying ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: 2 }} />}
+            </button>
+            <button className="mobile-lyric-ctrl-btn" onClick={nextSong} title="下一首">
+              <SkipForward size={24} />
+            </button>
+          </div>
+        </div>
+
+        {/* 移动端底部抽屉播放列表 */}
+        {isPlaylistOpen && (
+          <div className="mobile-playlist-sheet-overlay" onClick={() => setIsPlaylistOpen(false)}>
+            <div className="mobile-playlist-sheet" onClick={e => e.stopPropagation()}>
+              <div className="mobile-playlist-sheet-header">
+                <h3>播放队列 ({playlist.length})</h3>
+                <button className="mobile-playlist-sheet-close" onClick={() => setIsPlaylistOpen(false)}>
+                  <ChevronDown size={22} />
+                </button>
+              </div>
+              <div className="mobile-playlist-sheet-list">
+                {playlist.map((song, i) => (
+                  <div
+                    key={`${song.id}_${i}`}
+                    className={`mobile-playlist-sheet-item ${i === playIndex ? 'playing' : ''}`}
+                    onClick={() => {
+                      void playSong(song);
+                      setIsPlaylistOpen(false);
+                    }}
+                  >
+                    <div className="mobile-sheet-song-name">{song.name}</div>
+                    <div className="mobile-sheet-song-artist">{song.artist}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

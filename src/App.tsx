@@ -13,6 +13,7 @@ import { ShortcutHelpModal } from './components/ShortcutHelpModal';
 import { HistoryPanel } from './components/HistoryPanel';
 import { YearlyReport } from './components/YearlyReport';
 import { SmartPlaylistsPanel } from './components/SmartPlaylistsPanel';
+import { MyMusicMobilePanel } from './components/MyMusicMobilePanel';
 import { useShortcuts } from './hooks/useShortcuts';
 import { isAndroid } from './utils/platform';
 import './App.css';
@@ -24,7 +25,7 @@ function MainLayout() {
     return isAndroid() ? ('block' as const) : ('contents' as const);
   };
 
-  const [activeTab, setActiveTab] = useState<string>('local');
+  const [activeTab, setActiveTab] = useState<string>('search');
   const [isLyricOpen, setIsLyricOpen] = useState<boolean>(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState<boolean>(false);
   const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
@@ -65,8 +66,9 @@ function MainLayout() {
       />
 
       <main className="main-content">
-        <div style={{ display: panelDisplay('local', activeTab), height: '100%' }}><LocalMusicPanel /></div>
         <div style={{ display: panelDisplay('search', activeTab), height: '100%' }}><SearchPanel active={activeTab === 'search'} /></div>
+        <div style={{ display: panelDisplay('my', activeTab), height: '100%' }}><MyMusicMobilePanel onOpenReport={() => setIsReportOpen(true)} /></div>
+        <div style={{ display: panelDisplay('local', activeTab), height: '100%' }}><LocalMusicPanel /></div>
         <div style={{ display: panelDisplay('smart', activeTab), height: '100%' }}><SmartPlaylistsPanel /></div>
         <div style={{ display: panelDisplay('playlist', activeTab), height: '100%' }}><PlaylistPanel /></div>
         <div style={{ display: panelDisplay('favorites', activeTab), height: '100%' }}><FavoritePanel /></div>
