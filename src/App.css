@@ -26,6 +26,10 @@
   margin: 0;
   padding: 0;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 body {
@@ -2565,6 +2569,32 @@ body.is-car-landscape .sidebar {
   .source-tab {
     padding: 6px 12px !important;
     font-size: 12px !important;
+  }
+
+  /* ---------------- 移动端全局触控反馈与 60~120fps GPU 渲染 ---------------- */
+  .mobile-nav-menu .nav-item:active,
+  .control-btn:active,
+  .song-row:active,
+  .song-row-action-btn:active,
+  .mobile-subtab-btn:active,
+  .mobile-report-btn:active,
+  .mobile-lyric-play-btn:active,
+  .mobile-lyric-ctrl-btn:active,
+  .primary-btn:active,
+  .source-tab:active {
+    transform: scale(0.94) !important;
+    opacity: 0.82 !important;
+    transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.06s ease !important;
+  }
+
+  .main-content,
+  .lyric-list-container,
+  .mobile-playlist-sheet-list {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    will-change: scroll-position;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

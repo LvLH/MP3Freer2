@@ -18,17 +18,20 @@ class MainActivity : TauriActivity() {
       // ignore
     }
 
-    // 比亚迪等车机 GPU + 旧 WebView 硬件合成时常整页空白，改软件层绘制；配置媒体后台流畅播放
+    // 开启 GPU 硬件加速（支持 60~120Hz 高刷新率丝滑渲染）；配置媒体后台流畅播放
     Handler(Looper.getMainLooper()).postDelayed({
       val wv = findWebView(window.decorView) ?: return@postDelayed
       wv.setBackgroundColor(0xFF0F0A1A.toInt())
-      wv.setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+      wv.setLayerType(View.LAYER_TYPE_HARDWARE, null)
       try {
         wv.settings.mediaPlaybackRequiresUserGesture = false
+        wv.settings.domStorageEnabled = true
+        wv.settings.databaseEnabled = true
+        wv.settings.setNeedInitialFocus(false)
       } catch (_: Throwable) {
         // ignore
       }
-    }, 200)
+    }, 100)
   }
 
   private fun findWebView(view: View): WebView? {
