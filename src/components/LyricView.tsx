@@ -24,12 +24,14 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
+      // 仅在 PC 桌面端浮窗展开时生效，避免拦截移动端底部抽屉的点击事件
       if (
         isPlaylistOpen && 
         popupRef.current && 
         btnRef.current && 
         !popupRef.current.contains(e.target as Node) && 
-        !btnRef.current.contains(e.target as Node)
+        !btnRef.current.contains(e.target as Node) &&
+        !(e.target as HTMLElement)?.closest('.mobile-playlist-sheet')
       ) {
         setIsPlaylistOpen(false);
       }

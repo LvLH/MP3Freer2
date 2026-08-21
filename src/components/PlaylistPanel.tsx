@@ -34,8 +34,9 @@ export const PlaylistPanel: React.FC = () => {
         </div>
         {playlist.length > 0 && (
           <button 
-            className="primary-btn" 
+            className="primary-btn clear-playlist-btn" 
             onClick={clearPlaylist} 
+            title="清空列表"
             style={{ 
               background: 'rgba(239, 68, 68, 0.15)', 
               color: '#f87171', 
@@ -44,7 +45,7 @@ export const PlaylistPanel: React.FC = () => {
             }}
           >
             <Trash2 size={16} />
-            <span>清空列表</span>
+            <span className="btn-text">清空列表</span>
           </button>
         )}
       </div>

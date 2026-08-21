@@ -1,14 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Disc, FolderOpen, Trash2 } from 'lucide-react';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { AlertCircle, Disc, Trash2 } from 'lucide-react';
 import {
   API_ENDPOINTS,
   APP_VERSION,
-  DEFAULT_DOWNLOAD_PATH,
-  DOWNLOAD_PATH_KEY,
   getDefaultSearchSource,
-  getDownloadOnFavorite,
-  getDownloadPath,
   getEnabledApiEndpoints,
   getPreferredQuality,
   MUSIC_SOURCES,
@@ -16,8 +11,6 @@ import {
   QUALITY_OPTIONS,
   AudioQuality,
   setDefaultSearchSource,
-  setDownloadOnFavorite,
-  setDownloadPath,
   setEnabledApiEndpoints,
   setPreferredQuality,
 } from '../settings';
@@ -26,25 +19,16 @@ import { resourceCache } from '../services/cache';
 
 export const AboutPanel: React.FC = () => {
   const { reloadCurrentSong } = usePlayer();
-  const [downloadPath, setDownloadPathState] = useState<string>('');
   const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const [enabledEndpoints, setEnabledEndpointsState] = useState<string[]>([]);
   const [preferredQuality, setPreferredQualityState] = useState<AudioQuality>('high');
-  const [downloadOnFavorite, setDownloadOnFavoriteState] = useState(false);
 
   useEffect(() => {
-    const savedDownloadPath = getDownloadPath();
-    setDownloadPathState(savedDownloadPath);
-    if (!localStorage.getItem(DOWNLOAD_PATH_KEY)) {
-      localStorage.setItem(DOWNLOAD_PATH_KEY, DEFAULT_DOWNLOAD_PATH);
-    }
-
     const savedSource = getDefaultSearchSource();
     setSearchSource(savedSource);
     setDefaultSearchSource(savedSource);
 
     setPreferredQualityState(getPreferredQuality());
-    setDownloadOnFavoriteState(getDownloadOnFavorite());
     setEnabledEndpointsState(getEnabledApiEndpoints());
   }, []);
 
@@ -61,23 +45,6 @@ export const AboutPanel: React.FC = () => {
       localStorage.removeItem('mp3freer_favorite_songs');
       resourceCache.clear();
       window.location.reload();
-    }
-  };
-
-  const handleSelectDownloadPath = async () => {
-    try {
-      const selected = await openDialog({
-        directory: true,
-        multiple: false,
-        title: '选择收藏歌曲下载目录',
-      });
-
-      if (selected && !Array.isArray(selected)) {
-        setDownloadPathState(selected);
-        setDownloadPath(selected);
-      }
-    } catch (err) {
-      console.error('Failed to select download path:', err);
     }
   };
 
@@ -98,22 +65,13 @@ export const AboutPanel: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
-      <div className="glass-card" style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
-        <div style={{
-          width: 80,
-          height: 80,
-          borderRadius: 20,
-          background: 'linear-gradient(135deg, var(--primary-color), var(--secondary-color))',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 0 24px rgba(168, 85, 247, 0.4)',
-        }}>
-          <Disc size={40} className="spinning" style={{ color: 'white' }} />
+      <div className="glass-card" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+        <div className="about-logo-wrapper">
+          <Disc size={32} className="spinning" style={{ color: 'white' }} />
         </div>
         <div>
-          <h2>MP3Freer 音乐播放器</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>
+          <h2>MP3Freer</h2>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
             版本：v{APP_VERSION} | 基于 Tauri v2 的本地与在线音乐播放器。
           </p>
         </div>
@@ -162,44 +120,6 @@ export const AboutPanel: React.FC = () => {
                 ))}
               </div>
             </div>
-          </div>
-
-          <div className="setting-row">
-            <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>收藏时下载到本地</span>
-              <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                关闭时仅加入收藏列表；开启后，收藏在线歌曲会同时下载音频和歌词到下方目录。
-              </p>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16, flexShrink: 0, cursor: 'pointer', fontSize: 13, color: 'var(--text-main)' }}>
-              <input
-                type="checkbox"
-                checked={downloadOnFavorite}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  setDownloadOnFavoriteState(enabled);
-                  setDownloadOnFavorite(enabled);
-                }}
-                style={{ accentColor: '#10b981', width: 16, height: 16 }}
-              />
-              {downloadOnFavorite ? '已开启' : '已关闭'}
-            </label>
-          </div>
-
-          <div className="setting-row">
-            <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>收藏歌曲下载目录</span>
-              <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                仅在开启「收藏时下载到本地」后生效。目录不存在时会提醒并跳过下载（收藏仍会保留）。
-              </p>
-              <p style={{ color: 'var(--primary-hover)', fontSize: 11, marginTop: 6, wordBreak: 'break-all' }}>
-                {downloadPath || '未设置'}
-              </p>
-            </div>
-            <button className="primary-btn" onClick={handleSelectDownloadPath} style={{ height: 38, marginLeft: 16, flexShrink: 0 }}>
-              <FolderOpen size={14} />
-              <span style={{ fontSize: 13 }}>选择目录</span>
-            </button>
           </div>
 
 

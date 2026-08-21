@@ -975,6 +975,78 @@ body {
   color: var(--text-main);
 }
 
+.detail-action-btns {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: center;
+}
+
+.artist-banner {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  gap: 24px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 100%);
+  border-left: 4px solid var(--primary-color);
+}
+.artist-banner-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
+.artist-banner-info {
+  flex: 1;
+  min-width: 0;
+}
+.artist-banner-tag {
+  font-size: 12px;
+  color: var(--primary-hover);
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+.artist-banner-name {
+  font-size: 24px;
+  margin: 0;
+  color: var(--text-main);
+  font-weight: 700;
+}
+.artist-banner-fav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.2);
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.artist-banner-fav-btn.active {
+  border-color: var(--primary-hover);
+  background: rgba(168, 85, 247, 0.2);
+  color: var(--primary-hover);
+}
+
+.about-logo-wrapper {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.35);
+  flex-shrink: 0;
+}
+
 /* 加载旋转动画 */
 .animate-spin {
   animation: spin 1s linear infinite;
@@ -2234,14 +2306,30 @@ body.is-car-landscape .sidebar {
     height: 44px;
   }
 
-  /* ---------------- 中间主内容滚动区 ---------------- */
+  /* ---------------- 中间主内容滚动区（顶部状态栏安全区避让） ---------------- */
   .main-content {
     width: 100vw;
     height: calc(100vh - var(--mobile-nav-height) - var(--player-height) - env(safe-area-inset-bottom, 0px) - 12px);
     flex: none;
-    padding: 12px 12px 20px 12px;
+    padding: calc(env(safe-area-inset-top, 24px) + 8px) 12px 20px 12px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* 移动端卡片头部标题缩小 */
+  .glass-card h2 {
+    font-size: 16px !important;
+  }
+  .glass-card h3 {
+    font-size: 14px !important;
+  }
+  .glass-card p {
+    font-size: 12px !important;
+  }
+  .about-logo-wrapper {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 12px !important;
   }
 
   /* ---------------- 移动端“我的”面板分段栏 ---------------- */
@@ -2320,8 +2408,6 @@ body.is-car-landscape .sidebar {
     flex-shrink: 0;
   }
 
-  /* 关键修复：组件用 song-col-info，须给它收缩能力。
-     此前只定义了 song-row-main-info（组件未使用），导致歌名区在小屏无法收缩、一行展示不全 */
   .song-col-info,
   .song-row-main-info {
     flex: 1;
@@ -2352,7 +2438,6 @@ body.is-car-landscape .sidebar {
     flex-shrink: 0;
   }
 
-  /* 小屏隐藏来源 tag，减少横向噪音，只保留 Hi-Res 标识 */
   .tag-source {
     display: none;
   }
@@ -2371,7 +2456,6 @@ body.is-car-landscape .sidebar {
     display: none !important;
   }
 
-  /* 操作按钮 44px 触控目标（拇指热区），小屏更易点 */
   .song-row-actions {
     display: flex !important;
     align-items: center;
@@ -2403,7 +2487,7 @@ body.is-car-landscape .sidebar {
     display: flex !important;
     align-items: center;
     justify-content: space-between;
-    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 8px 16px;
+    padding: calc(12px + env(safe-area-inset-top, 24px)) 16px 8px 16px;
     width: 100vw;
     z-index: 10;
     flex-shrink: 0;
@@ -2481,7 +2565,6 @@ body.is-car-landscape .sidebar {
     color: #ffffff;
   }
 
-  /* 全屏歌词移动端底部控制条 */
   .mobile-lyric-bottom-bar {
     display: flex !important;
     flex-direction: column;
@@ -2621,9 +2704,139 @@ body.is-car-landscape .sidebar {
   }
 
   /* ---------------- 搜索与卡片排版在手机端的优化 ---------------- */
-  .playlist-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+  .search-panel-content-scroll {
+    margin-top: 8px !important;
+  }
+
+  /* 歌单详情页在移动端的紧凑适配 */
+  .detail-header {
+    flex-direction: row !important;
+    gap: 12px !important;
+    align-items: center !important;
+  }
+
+  .detail-cover {
+    width: 72px !important;
+    height: 72px !important;
+    border-radius: 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .detail-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .detail-title {
+    font-size: 15px !important;
+    line-height: 1.3 !important;
+    max-width: 100% !important;
+    word-break: break-word !important;
+  }
+
+  .detail-tag {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+  }
+
+  .detail-author {
+    font-size: 11px !important;
+  }
+
+  .detail-action-btns {
+    gap: 8px !important;
+    margin-top: 8px !important;
+  }
+
+  .playlist-action-btn .btn-text {
+    display: none !important;
+  }
+
+  .playlist-action-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* 歌手卡片在手机端的紧凑排版 */
+  .artist-banner {
+    padding: 10px 12px !important;
     gap: 10px !important;
+    border-radius: 12px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .artist-banner-avatar {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .artist-banner-tag {
+    font-size: 10px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .artist-banner-name {
+    font-size: 15px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
+  }
+
+  .artist-banner-fav-btn .artist-fav-text {
+    display: none !important;
+  }
+
+  .artist-banner-fav-btn {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    padding: 0 !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* 收藏列表图标缩小到原有一半（每行 4 列，卡片宽 75px） */
+  .playlist-grid {
+    grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .playlist-card {
+    padding: 4px !important;
+  }
+
+  .playlist-card-name {
+    font-size: 11px !important;
+    margin-top: 6px !important;
+  }
+
+  .playlist-card-author {
+    font-size: 9px !important;
+  }
+
+  /* 队列清空按钮仅保留图标 */
+  .clear-playlist-btn .btn-text {
+    display: none !important;
+  }
+
+  .clear-playlist-btn {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+    padding: 0 !important;
+    border-radius: 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   .source-selectors {
@@ -2636,8 +2849,6 @@ body.is-car-landscape .sidebar {
     font-size: 12px !important;
   }
 
-  /* 移动端搜索栏：全宽输入框 + 图标搜索按钮。
-     "回到顶部"按钮在小屏与搜索框挤一行、浪费横向空间，隐藏后搜索框占满 */
   .search-bar-row {
     gap: 10px;
   }
@@ -2668,7 +2879,10 @@ body.is-car-landscape .sidebar {
   .mobile-lyric-play-btn:active,
   .mobile-lyric-ctrl-btn:active,
   .primary-btn:active,
-  .source-tab:active {
+  .source-tab:active,
+  .playlist-action-btn:active,
+  .artist-banner-fav-btn:active,
+  .clear-playlist-btn:active {
     transform: scale(0.94) !important;
     opacity: 0.82 !important;
     transition: transform 0.06s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.06s ease !important;

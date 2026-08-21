@@ -447,7 +447,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
         </form>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', marginTop: 24 }} onScroll={handleResultsScroll} ref={scrollContainerRef}>
+      <div className="search-panel-content-scroll" style={{ flex: 1, overflowY: 'auto' }} onScroll={handleResultsScroll} ref={scrollContainerRef}>
         {selectedPlaylist ? (
           <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
             <button className="back-btn" onClick={() => setSelectedPlaylist(null)} title={TEXT.back}>
@@ -460,17 +460,17 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                 <span className="detail-tag">{TEXT.playlistTag}</span>
                 <h2 className="detail-title">{selectedPlaylist.name}</h2>
                 <span className="detail-author">{TEXT.creator} {selectedPlaylist.creatorName || TEXT.unknown}</span>
-                <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                  <button className="primary-btn" onClick={() => playAll(selectedPlaylist.item.map(toPlayerSong))} style={{ borderRadius: 20, padding: '8px 16px', height: 36 }}>
+                <div className="detail-action-btns">
+                  <button className="primary-btn playlist-action-btn" onClick={() => playAll(selectedPlaylist.item.map(toPlayerSong))} title="播放全部">
                     <Play size={16} fill="currentColor" />
-                    <span>播放全部</span>
+                    <span className="btn-text">播放全部</span>
                   </button>
-                  <button className="icon-btn" onClick={() => addAllToPlaylist(selectedPlaylist.item.map(toPlayerSong))} title="全部添加到队列" style={{ borderRadius: 20, padding: '8px 16px', height: 36, width: 'auto', gap: 6, background: 'rgba(255,255,255,0.05)' }}>
+                  <button className="icon-btn playlist-action-btn" onClick={() => addAllToPlaylist(selectedPlaylist.item.map(toPlayerSong))} title="全部添加到队列">
                     <Plus size={16} />
-                    <span>添加全部</span>
+                    <span className="btn-text">添加全部</span>
                   </button>
                   <button 
-                    className="icon-btn" 
+                    className="icon-btn playlist-action-btn" 
                     onClick={() => toggleFavoritePlaylist({
                       id: selectedPlaylist.id,
                       name: selectedPlaylist.name,
@@ -481,17 +481,11 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                     })} 
                     title={isFavoritePlaylist(selectedPlaylist.id) ? "取消收藏" : "收藏歌单"} 
                     style={{ 
-                      borderRadius: 20, 
-                      padding: '8px 16px', 
-                      height: 36, 
-                      width: 'auto', 
-                      gap: 6, 
-                      background: 'rgba(255,255,255,0.05)', 
                       color: isFavoritePlaylist(selectedPlaylist.id) ? '#ef4444' : undefined 
                     }}
                   >
                     <Heart size={16} fill={isFavoritePlaylist(selectedPlaylist.id) ? 'currentColor' : 'none'} />
-                    <span>{isFavoritePlaylist(selectedPlaylist.id) ? "已收藏" : "收藏"}</span>
+                    <span className="btn-text">{isFavoritePlaylist(selectedPlaylist.id) ? "已收藏" : "收藏"}</span>
                   </button>
                 </div>
               </div>
