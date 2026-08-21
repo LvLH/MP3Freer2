@@ -140,15 +140,13 @@ export function computeReportStats(history: HistoryEntry[]): ReportStats {
   };
 }
 
-/** 格式化时长（秒 → "X小时Y分钟"） */
+/** 格式化时长（秒 → "1.5h" / "45m" / "30s"） */
 export function formatDuration(secs: number): string {
-  if (secs < 60) return `${Math.round(secs)}秒`;
+  if (secs < 60) return `${Math.max(1, Math.round(secs))}s`;
   const minutes = Math.floor(secs / 60);
-  if (minutes < 60) return `${minutes}分钟`;
-  const hours = Math.floor(minutes / 60);
-  const remMin = minutes % 60;
-  if (hours < 24) return `${hours}小时${remMin}分钟`;
-  const days = Math.floor(hours / 24);
-  const remHr = hours % 24;
-  return `${days}天${remHr}小时`;
+  if (minutes < 60) return `${minutes}m`;
+  const hours = secs / 3600;
+  // 1位小数（如 1.5h，10小时以上显示整数如 12h）
+  const formatted = hours >= 10 ? Math.round(hours).toString() : (Math.round(hours * 10) / 10).toString();
+  return `${formatted}h`;
 }

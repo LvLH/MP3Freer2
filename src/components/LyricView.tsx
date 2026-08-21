@@ -337,41 +337,8 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
 
 
 
-        {/* 移动端专属底部控制栏 */}
+        {/* 移动端专属底部控制栏（纯粹控制按钮区） */}
         <div className="mobile-lyric-bottom-bar">
-          <div className="mobile-lyric-progress-wrap">
-            <span className="mobile-time-text">{formatSecs(currentTime)}</span>
-            <div className="slider-bar" style={{ flex: 1 }}>
-              <input
-                type="range"
-                min={0}
-                max={duration || 100}
-                step={0.1}
-                value={currentTime}
-                onChange={handleSeek}
-                style={{
-                  position: 'absolute',
-                  width: '100%',
-                  height: '100%',
-                  opacity: 0,
-                  cursor: 'pointer',
-                  left: 0,
-                  top: 0,
-                  zIndex: 2
-                }}
-              />
-              <div
-                className="slider-fill"
-                style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
-              />
-              <div
-                className="slider-thumb"
-                style={{ left: `${(currentTime / (duration || 1)) * 100}%` }}
-              />
-            </div>
-            <span className="mobile-time-text">{formatSecs(duration)}</span>
-          </div>
-
           <div className="mobile-lyric-btns">
             <button className="mobile-lyric-ctrl-btn" onClick={prevSong} title="上一首">
               <SkipBack size={24} />

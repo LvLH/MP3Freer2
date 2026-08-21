@@ -32,23 +32,23 @@ export const SmartPlaylistsPanel: React.FC = () => {
 
       <div className="smart-grid">
         {playlists.map(pl => (
-          <div key={pl.id} className="smart-card">
+          <div key={pl.id} className="smart-card" onClick={() => playAll(pl.songs)}>
             <div className="smart-card-cover">
               <span className="smart-card-icon">{pl.icon}</span>
-              <div className="smart-card-overlay">
+              <div className="smart-card-overlay" onClick={e => e.stopPropagation()}>
                 <button
                   className="smart-play-btn"
                   onClick={() => playAll(pl.songs)}
                   title="立即播放"
                 >
-                  <Play size={20} fill="currentColor" />
+                  <Play size={18} fill="currentColor" />
                 </button>
                 <button
                   className="smart-add-btn"
                   onClick={() => addAllToPlaylist(pl.songs)}
                   title="添加到队列"
                 >
-                  <Shuffle size={16} />
+                  <Shuffle size={15} />
                 </button>
               </div>
             </div>

@@ -98,8 +98,18 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
 
   return (
     <div className="player-bar">
-      {/* 移动端极简顶部可拖动进度指示条 */}
-      <div className="mobile-player-progress-wrap">
+      {/* 移动端顶部可拖动进度指示条（带滑轨与滑块） */}
+      <div className="mobile-player-progress-bar">
+        <div className="mobile-player-progress-track">
+          <div
+            className="mobile-player-progress-fill"
+            style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+          />
+          <div
+            className="mobile-player-progress-thumb"
+            style={{ left: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+          />
+        </div>
         <input
           type="range"
           min={0}
@@ -109,10 +119,6 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
           onChange={handleProgressChange}
           className="mobile-player-progress-input"
           title="拖动调整播放进度"
-        />
-        <div
-          className="mobile-player-progress-fill"
-          style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
         />
       </div>
 

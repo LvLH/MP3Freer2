@@ -176,29 +176,67 @@ export const HistoryPanel: React.FC = () => {
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="glass-card" style={{ flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
-            <ArrowUp size={18} />
-          </button>
-          <Clock size={24} style={{ color: 'var(--primary-color)' }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2>播放历史</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
-              {activeTab === 'recent'
-                ? `最近听过 ${recentItems.length} 首 · 共 ${playHistory.length} 次播放`
-                : `本周最爱 Top ${topItems.length}`}
-            </p>
+      <div className="glass-card" style={{ flexShrink: 0, padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+            <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
+              <ArrowUp size={18} />
+            </button>
+            <Clock size={22} style={{ color: 'var(--primary-color)', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 style={{ fontSize: 16, margin: 0 }}>播放历史</h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {activeTab === 'recent'
+                  ? `最近听过 ${recentItems.length} 首 · 共 ${playHistory.length} 次播放`
+                  : `本周最爱 Top ${topItems.length}`}
+              </p>
+            </div>
           </div>
+          {playHistory.length > 0 && (
+            <button
+              className="icon-btn"
+              onClick={clearPlayHistory}
+              title="清空历史"
+              style={{ color: '#f87171', width: 32, height: 32, padding: 0, flexShrink: 0, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+          <div className="type-selectors" style={{ margin: 0 }}>
+            <label className={`type-radio ${activeTab === 'recent' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="historyTab"
+                checked={activeTab === 'recent'}
+                onChange={() => setActiveTab('recent')}
+                style={{ display: 'none' }}
+              />
+              <span>最近播放</span>
+            </label>
+            <label className={`type-radio ${activeTab === 'top' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="historyTab"
+                checked={activeTab === 'top'}
+                onChange={() => setActiveTab('top')}
+                style={{ display: 'none' }}
+              />
+              <span>本周最爱</span>
+            </label>
+          </div>
+
           {visibleSongs.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
                 className="primary-btn"
                 onClick={handlePlayAll}
                 title={activeTab === 'recent' ? '按最近顺序播放全部' : '按本周最爱顺序播放'}
-                style={{ borderRadius: 20, padding: '0 14px', height: 32, fontSize: 13, gap: 6 }}
+                style={{ borderRadius: 20, padding: '0 12px', height: 30, fontSize: 12, gap: 5 }}
               >
-                <Play size={14} fill="currentColor" />
+                <Play size={13} fill="currentColor" />
                 <span>{activeTab === 'recent' ? '继续听' : '播放全部'}</span>
               </button>
               <button
@@ -207,56 +245,23 @@ export const HistoryPanel: React.FC = () => {
                 title="全部加入播放队列"
                 style={{
                   borderRadius: 20,
-                  padding: '0 12px',
-                  height: 32,
+                  padding: '0 10px',
+                  height: 30,
                   width: 'auto',
-                  gap: 6,
-                  background: 'rgba(255,255,255,0.05)',
-                  fontSize: 13,
+                  gap: 5,
+                  background: 'rgba(255,255,255,0.06)',
+                  fontSize: 12,
                 }}
               >
-                <ListPlus size={14} />
+                <ListPlus size={13} />
                 <span>加入队列</span>
               </button>
             </div>
           )}
-          {playHistory.length > 0 && (
-            <button
-              className="icon-btn"
-              onClick={clearPlayHistory}
-              title="清空历史"
-              style={{ color: '#f87171', width: 28, height: 28, padding: 0, flexShrink: 0 }}
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-
-        <div className="type-selectors" style={{ marginTop: 24 }}>
-          <label className={`type-radio ${activeTab === 'recent' ? 'active' : ''}`}>
-            <input
-              type="radio"
-              name="historyTab"
-              checked={activeTab === 'recent'}
-              onChange={() => setActiveTab('recent')}
-              style={{ display: 'none' }}
-            />
-            <span>最近播放</span>
-          </label>
-          <label className={`type-radio ${activeTab === 'top' ? 'active' : ''}`}>
-            <input
-              type="radio"
-              name="historyTab"
-              checked={activeTab === 'top'}
-              onChange={() => setActiveTab('top')}
-              style={{ display: 'none' }}
-            />
-            <span>本周最爱</span>
-          </label>
         </div>
       </div>
 
-      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 24 }}>
+      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}>
         <div className="glass-card" style={{ minHeight: '100%' }}>
           {activeTab === 'recent' ? (
             recentItems.length === 0 ? (

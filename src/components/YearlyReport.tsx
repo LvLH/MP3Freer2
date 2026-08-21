@@ -1,5 +1,5 @@
-import { useMemo, useRef } from 'react';
-import { X, BarChart3, Clock, Music2, User, Calendar } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { X, BarChart3, Clock, Music2, User, Calendar, Download, Sparkles } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { computeReportStats, formatDuration, ReportStats } from '../utils/reportStats';
 
@@ -14,6 +14,8 @@ const HOUR_BUCKET_COLORS = ['#3b82f6', '#a855f7', '#ec4899', '#f59e0b'];
 export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
   const { playHistory } = usePlayer();
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const [posterUrl, setPosterUrl] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const stats: ReportStats | null = useMemo(() => {
     if (playHistory.length === 0) return null;
@@ -23,9 +25,175 @@ export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
   if (!isOpen) return null;
 
   const handleExportPng = () => {
-    // 简单方案：用浏览器对 cardRef 截图需引入 html2canvas。
-    // 这里退化成提示用户用系统截图（Win+Shift+S）
-    alert('请用系统截图工具（Win + Shift + S）框选年报卡片保存分享');
+    if (!stats) return;
+    setIsGenerating(true);
+
+    try {
+      const width = 750;
+      const height = 1380;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // 1. 深邃暗黑渐变背景
+      const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+      bgGradient.addColorStop(0, '#100b22');
+      bgGradient.addColorStop(0.5, '#191136');
+      bgGradient.addColorStop(1, '#0e091d');
+      ctx.fillStyle = bgGradient;
+      ctx.fillRect(0, 0, width, height);
+
+      // 2. 装饰光晕
+      const glow1 = ctx.createRadialGradient(200, 200, 20, 200, 200, 300);
+      glow1.addColorStop(0, 'rgba(168, 85, 247, 0.25)');
+      glow1.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow1;
+      ctx.fillRect(0, 0, width, height);
+
+      const glow2 = ctx.createRadialGradient(600, 1000, 20, 600, 1000, 350);
+      glow2.addColorStop(0, 'rgba(59, 130, 246, 0.2)');
+      glow2.addColorStop(1, 'transparent');
+      ctx.fillStyle = glow2;
+      ctx.fillRect(0, 0, width, height);
+
+      // 3. 头部标题
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 44px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('我的听歌年报', width / 2, 90);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.font = '22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillText(`基于 ${playHistory.length} 条播放记录 · MP3Freer 专属生成`, width / 2, 130);
+
+      // 4. 2x2 统计卡片
+      const cards = [
+        { label: '累计播放次数', value: `${stats.totalPlays}`, icon: '▶' },
+        { label: '累计听歌时长', value: `${formatDuration(stats.totalDurationSecs)}`, icon: '⏱' },
+        { label: '听过歌曲数', value: `${stats.uniqueSongs}`, icon: '🎵' },
+        { label: '听过歌手数', value: `${stats.uniqueArtists}`, icon: '🎤' },
+      ];
+
+      const startY = 175;
+      const cardW = 320;
+      const cardH = 120;
+      const gap = 20;
+      const leftMargin = (width - (cardW * 2 + gap)) / 2;
+
+      cards.forEach((card, i) => {
+        const row = Math.floor(i / 2);
+        const col = i % 2;
+        const x = leftMargin + col * (cardW + gap);
+        const y = startY + row * (cardH + gap);
+
+        // 卡片圆角矩形背景
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.beginPath();
+        ctx.roundRect(x, y, cardW, cardH, 16);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 标签与数值
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#c084fc';
+        ctx.font = 'bold 36px sans-serif';
+        ctx.fillText(card.value, x + cardW / 2, y + 55);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '20px sans-serif';
+        ctx.fillText(card.label, x + cardW / 2, y + 92);
+      });
+
+      // 5. 最爱歌手 Top 5
+      let listY = startY + (cardH * 2 + gap) + 45;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillText('🎤 最爱歌手 Top 5', leftMargin, listY);
+
+      listY += 20;
+      stats.topArtists.slice(0, 5).forEach((a, idx) => {
+        listY += 38;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+        ctx.beginPath();
+        ctx.roundRect(leftMargin, listY - 26, width - leftMargin * 2, 34, 8);
+        ctx.fill();
+
+        ctx.fillStyle = idx === 0 ? '#f59e0b' : idx === 1 ? '#94a3b8' : idx === 2 ? '#d97706' : 'rgba(255, 255, 255, 0.5)';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.fillText(`${idx + 1}`, leftMargin + 14, listY - 3);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '20px sans-serif';
+        ctx.fillText(a.artist, leftMargin + 46, listY - 3);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.font = '18px sans-serif';
+        ctx.fillText(`${a.count} 次`, width - leftMargin - 14, listY - 3);
+        ctx.textAlign = 'left';
+      });
+
+      // 6. 最爱歌曲 Top 5
+      listY += 50;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 26px sans-serif';
+      ctx.fillText('🎵 最爱歌曲 Top 5', leftMargin, listY);
+
+      listY += 20;
+      stats.topSongs.slice(0, 5).forEach((s, idx) => {
+        listY += 42;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+        ctx.beginPath();
+        ctx.roundRect(leftMargin, listY - 28, width - leftMargin * 2, 36, 8);
+        ctx.fill();
+
+        ctx.fillStyle = idx === 0 ? '#f59e0b' : idx === 1 ? '#94a3b8' : idx === 2 ? '#d97706' : 'rgba(255, 255, 255, 0.5)';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.fillText(`${idx + 1}`, leftMargin + 14, listY - 3);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '20px sans-serif';
+        const songName = s.song.name.length > 18 ? s.song.name.slice(0, 18) + '...' : s.song.name;
+        ctx.fillText(songName, leftMargin + 46, listY - 3);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.font = '18px sans-serif';
+        ctx.fillText(`${s.count} 次`, width - leftMargin - 14, listY - 3);
+        ctx.textAlign = 'left';
+      });
+
+      // 7. 底部专属签名
+      const footerY = height - 60;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#a855f7';
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText('MP3Freer · 听你想听的歌', width / 2, footerY);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.font = '16px sans-serif';
+      ctx.fillText(new Date().toLocaleDateString('zh-CN'), width / 2, footerY + 28);
+
+      const url = canvas.toDataURL('image/png');
+      setPosterUrl(url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownloadImage = () => {
+    if (!posterUrl) return;
+    const a = document.createElement('a');
+    a.href = posterUrl;
+    a.download = `MP3Freer-听歌年报-${new Date().getFullYear()}.png`;
+    a.click();
   };
 
   return (
@@ -218,8 +386,9 @@ export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
               </section>
 
               <footer className="report-footer">
-                <button className="report-share-btn" onClick={handleExportPng}>
-                  截图分享
+                <button className="report-share-btn" onClick={handleExportPng} disabled={isGenerating}>
+                  <Sparkles size={16} />
+                  <span>{isGenerating ? '生成海报中...' : '生成年报海报'}</span>
                 </button>
                 <span className="report-footer-hint">MP3Freer · 你的音乐日记</span>
               </footer>
@@ -227,6 +396,29 @@ export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
           )}
         </div>
       </div>
+
+      {/* 生成的高清海报长图展示与保存弹窗 */}
+      {posterUrl && (
+        <div className="report-poster-overlay" onClick={() => setPosterUrl(null)}>
+          <div className="report-poster-modal" onClick={e => e.stopPropagation()}>
+            <div className="report-poster-header">
+              <h3>长按图片保存或点击下载</h3>
+              <button className="report-poster-close" onClick={() => setPosterUrl(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="report-poster-body">
+              <img src={posterUrl} alt="我的听歌年报" className="report-poster-img" />
+            </div>
+            <div className="report-poster-footer">
+              <button className="primary-btn" onClick={handleDownloadImage} style={{ borderRadius: 20, width: '100%', height: 42, gap: 6 }}>
+                <Download size={16} />
+                <span>保存海报图片</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1519,9 +1519,9 @@ body {
 
 .report-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 28px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
 .stat-card {
@@ -1810,6 +1810,78 @@ body {
 .report-footer-hint {
   font-size: 11px;
   color: var(--text-muted, #999);
+}
+
+/* 听歌年报高清海报弹窗 */
+.report-poster-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.report-poster-modal {
+  background: rgba(22, 16, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  max-width: 380px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+}
+
+.report-poster-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.report-poster-header h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #fff;
+}
+
+.report-poster-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.report-poster-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.report-poster-img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.report-poster-footer {
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
 }
 
 /* ============ 智能歌单 ============ */
@@ -2254,15 +2326,18 @@ body.is-car-landscape .sidebar {
   }
 
   .player-title.marquee-scroll {
-    animation: player-title-marquee 8s linear infinite alternate;
+    animation: player-title-marquee 9s ease-in-out infinite;
   }
 
   @keyframes player-title-marquee {
-    0%, 20% {
+    0%, 25% {
       transform: translateX(0);
     }
-    80%, 100% {
-      transform: translateX(calc(-100% + 115px));
+    75%, 90% {
+      transform: translateX(calc(-100% + 120px));
+    }
+    100% {
+      transform: translateX(0);
     }
   }
 
@@ -2275,30 +2350,28 @@ body.is-car-landscape .sidebar {
     max-width: 125px;
   }
 
-  /* 移动端迷你条顶部可拖动交互进度条 */
-  .mobile-player-progress-wrap {
+  /* 移动端迷你条顶部可拖动交互进度条（带清晰滑轨与白色滑块） */
+  .mobile-player-progress-bar {
     display: block !important;
     position: absolute;
-    top: -4px;
-    left: 12px;
-    right: 12px;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 4px;
+    top: -5px;
+    left: 8px;
+    right: 8px;
+    height: 14px;
     cursor: pointer;
     z-index: 10;
   }
 
-  .mobile-player-progress-input {
+  .mobile-player-progress-track {
     position: absolute;
-    top: -6px;
+    top: 5px;
     left: 0;
-    width: 100%;
-    height: 18px;
-    opacity: 0;
-    margin: 0;
-    cursor: pointer;
-    z-index: 2;
+    right: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    overflow: visible;
+    pointer-events: none;
   }
 
   .mobile-player-progress-fill {
@@ -2306,6 +2379,30 @@ body.is-car-landscape .sidebar {
     background: var(--primary-gradient);
     border-radius: 4px;
     pointer-events: none;
+  }
+
+  .mobile-player-progress-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 6px rgba(168, 85, 247, 0.8), 0 2px 4px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+  }
+
+  .mobile-player-progress-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+    z-index: 2;
   }
 
   .player-center {
@@ -2317,6 +2414,45 @@ body.is-car-landscape .sidebar {
     gap: 4px;
     display: flex;
     align-items: center;
+  }
+
+  /* 移动端智能歌单紧凑卡片排版 */
+  .smart-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+  .smart-card {
+    border-radius: 10px !important;
+  }
+  .smart-card-cover {
+    aspect-ratio: 16/9 !important;
+  }
+  .smart-card-icon {
+    font-size: 28px !important;
+  }
+  .smart-card-info {
+    padding: 8px 10px !important;
+  }
+  .smart-card-name {
+    font-size: 13px !important;
+    margin-bottom: 2px !important;
+  }
+  .smart-card-desc {
+    font-size: 10px !important;
+    margin-bottom: 4px !important;
+  }
+  .smart-card-overlay {
+    opacity: 1 !important;
+    background: rgba(0, 0, 0, 0.25) !important;
+    gap: 8px !important;
+  }
+  .smart-play-btn {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .smart-add-btn {
+    width: 28px !important;
+    height: 28px !important;
   }
 
   .player-controls .control-btn.mobile-keep-btn {
