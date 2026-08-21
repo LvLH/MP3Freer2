@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, Disc, Trash2 } from 'lucide-react';
+import { AlertCircle, Disc } from 'lucide-react';
 import {
   API_ENDPOINTS,
   APP_VERSION,
@@ -161,29 +161,24 @@ export const AboutPanel: React.FC = () => {
                 color: '#f87171',
                 boxShadow: 'none',
                 border: '1px solid rgba(239, 68, 68, 0.2)',
-                height: 38,
+                height: 36,
+                padding: '0 16px',
               }}
             >
-              <Trash2 size={14} />
-              <span style={{ fontSize: 13 }}>清除索引</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>清除索引</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div className="glass-card" style={{ display: 'flex', gap: 16, borderLeft: '4px solid #f59e0b', background: 'rgba(245, 158, 11, 0.03)' }}>
-        <AlertCircle size={24} style={{ color: '#f59e0b', flex: 'none' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <h4 style={{ color: '#f59e0b' }}>免责声明与服务说明</h4>
-          <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-muted)' }}>
-            在线解析的数据来自第三方公开网络服务，仅用于个人学习、交流和演示。软件本身不存储、分发或传播任何在线音频文件，相关资源版权归原作者所有。
-            <br/><br/>
-            <b>版权鸣谢：</b>本软件内置的第三方音乐搜索解析 API 由以下服务提供，感谢原作者的无私奉献与开源精神：
-            <br/>• <b>GD音乐台</b>（music.gdstudio.xyz / music-api.gdstudio.xyz）
-            <br/>• <b>星之阁 API</b>（api.xingzhige.com）
-            <br/>节点可在上方设置中开关；可用性与服务条款以各提供方为准。
-          </p>
+      <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: 8, borderLeft: '4px solid #f59e0b', background: 'rgba(245, 158, 11, 0.03)', padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <AlertCircle size={18} style={{ color: '#f59e0b', flex: 'none' }} />
+          <h4 style={{ color: '#f59e0b', margin: 0, fontSize: 14 }}>免责声明与服务说明</h4>
         </div>
+        <p style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text-muted)', margin: 0 }}>
+          在线解析数据来自第三方公开网络服务（GD音乐台、星之阁等），仅用于个人学习交流演示。本软件不存储或传播任何在线音频，资源版权归原作者所有。
+        </p>
       </div>
     </div>
   );

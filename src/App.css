@@ -2239,13 +2239,31 @@ body.is-car-landscape .sidebar {
     overflow: hidden;
   }
 
+  .player-title-wrap {
+    max-width: 125px;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+  }
+
   .player-title {
-    max-width: 100%;
+    display: inline-block;
     font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+
+  .player-title.marquee-scroll {
+    animation: player-title-marquee 8s linear infinite alternate;
+  }
+
+  @keyframes player-title-marquee {
+    0%, 20% {
+      transform: translateX(0);
+    }
+    80%, 100% {
+      transform: translateX(calc(-100% + 115px));
+    }
   }
 
   .player-artist {
@@ -2254,6 +2272,40 @@ body.is-car-landscape .sidebar {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 125px;
+  }
+
+  /* 移动端迷你条顶部可拖动交互进度条 */
+  .mobile-player-progress-wrap {
+    display: block !important;
+    position: absolute;
+    top: -4px;
+    left: 12px;
+    right: 12px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    cursor: pointer;
+    z-index: 10;
+  }
+
+  .mobile-player-progress-input {
+    position: absolute;
+    top: -6px;
+    left: 0;
+    width: 100%;
+    height: 18px;
+    opacity: 0;
+    margin: 0;
+    cursor: pointer;
+    z-index: 2;
+  }
+
+  .mobile-player-progress-fill {
+    height: 100%;
+    background: var(--primary-gradient);
+    border-radius: 4px;
+    pointer-events: none;
   }
 
   .player-center {
@@ -2262,38 +2314,38 @@ body.is-car-landscape .sidebar {
   }
 
   .player-controls {
-    gap: 8px;
+    gap: 4px;
+    display: flex;
+    align-items: center;
   }
 
-  .player-controls .control-btn {
-    width: 44px;
-    height: 44px;
-    padding: 0;
+  .player-controls .control-btn.mobile-keep-btn {
+    width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
   }
 
   .player-controls .control-btn.play-pause {
-    width: 52px;
-    height: 52px;
+    width: 38px !important;
+    height: 38px !important;
     background: var(--primary-gradient);
     color: #fff;
     border-radius: 50%;
-    box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4);
-  }
-
-  /* 移动端迷你条隐藏 prev，保留 play/next（prev 进全屏页操作，减少拥挤） */
-  .player-controls .mobile-hide-btn {
-    display: none !important;
+    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
   }
 
   .progress-container {
     display: none !important;
   }
 
-  /* 移动端 player-right 只保留收藏按钮（mobile-keep-btn），播放模式/歌词/音量隐藏 */
+  /* 移动端 player-right 保留收藏按钮与播放模式按钮 */
   .player-right {
     display: flex !important;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     flex-shrink: 0;
   }
 
@@ -2301,9 +2353,13 @@ body.is-car-landscape .sidebar {
     display: none !important;
   }
 
-  .player-right .mobile-keep-btn {
-    width: 44px;
-    height: 44px;
+  .player-right .control-btn.mobile-keep-btn {
+    width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
   }
 
   /* ---------------- 中间主内容滚动区（顶部状态栏安全区避让） ---------------- */
@@ -2398,6 +2454,7 @@ body.is-car-landscape .sidebar {
     padding: 11px 8px;
     gap: 8px;
     border-radius: 10px;
+    cursor: pointer;
   }
 
   .song-col-index {
@@ -2486,24 +2543,11 @@ body.is-car-landscape .sidebar {
   .mobile-lyric-header {
     display: flex !important;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     padding: calc(12px + env(safe-area-inset-top, 24px)) 16px 8px 16px;
     width: 100vw;
     z-index: 10;
     flex-shrink: 0;
-  }
-
-  .mobile-lyric-back-btn,
-  .mobile-lyric-queue-btn {
-    background: transparent;
-    border: none;
-    color: #ffffff;
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
   }
 
   .mobile-lyric-title-info {
@@ -2512,7 +2556,7 @@ body.is-car-landscape .sidebar {
     flex-direction: column;
     align-items: center;
     min-width: 0;
-    padding: 0 8px;
+    padding: 0 16px;
   }
 
   .mobile-lyric-song-name {
@@ -2566,13 +2610,14 @@ body.is-car-landscape .sidebar {
   }
 
   .mobile-lyric-bottom-bar {
+    position: relative;
     display: flex !important;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px)) 16px;
+    gap: 10px;
+    padding: 12px 16px calc(18px + env(safe-area-inset-bottom, 0px)) 16px;
     width: 100vw;
     margin-left: -20px;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
     flex-shrink: 0;
   }
 
@@ -2619,7 +2664,40 @@ body.is-car-landscape .sidebar {
     cursor: pointer;
   }
 
-  /* 移动端抽屉歌单 (Bottom Sheet) */
+  /* 全屏歌词左下/右下浮动工具组 */
+  .mobile-lyric-corner-tools {
+    position: absolute;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    z-index: 20;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .mobile-lyric-corner-tools.align-left {
+    left: 20px;
+    right: auto;
+  }
+  .mobile-lyric-corner-tools.align-right {
+    right: 20px;
+    left: auto;
+  }
+  .mobile-lyric-tool-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  /* 移动端抽屉歌单 (Bottom Sheet) & 队列左滑删除动效 */
   .mobile-playlist-sheet-overlay {
     display: block !important;
     position: fixed;
@@ -2673,13 +2751,45 @@ body.is-car-landscape .sidebar {
     padding: 8px 12px;
   }
 
-  .mobile-playlist-sheet-item {
+  /* 单曲左滑删除与平滑消失动效 */
+  .mobile-playlist-sheet-item-wrapper,
+  .queue-item-swipe-wrapper {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .mobile-playlist-sheet-item-wrapper.deleting,
+  .queue-item-swipe-wrapper.deleting {
+    opacity: 0;
+    max-height: 0 !important;
+    min-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    transform: scaleY(0);
+  }
+
+  .mobile-playlist-sheet-item,
+  .queue-song-row {
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     padding: 12px 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     cursor: pointer;
+    min-width: 0;
+    transition: transform 0.25s ease;
+  }
+
+  .mobile-playlist-sheet-item.swiped,
+  .queue-song-row.swiped {
+    transform: translateX(-70px);
   }
 
   .mobile-playlist-sheet-item.playing .mobile-sheet-song-name {
@@ -2690,7 +2800,8 @@ body.is-car-landscape .sidebar {
   .mobile-sheet-song-name {
     font-size: 14px;
     color: var(--text-main);
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2699,8 +2810,32 @@ body.is-car-landscape .sidebar {
   .mobile-sheet-song-artist {
     font-size: 12px;
     color: var(--text-muted);
-    margin-left: 10px;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    max-width: 40%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+  }
+
+  .mobile-sheet-delete-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 32px;
+    padding: 0 10px;
+    background: #ef4444;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
   }
 
   /* ---------------- 搜索与卡片排版在手机端的优化 ---------------- */
@@ -2882,6 +3017,8 @@ body.is-car-landscape .sidebar {
   .source-tab:active,
   .playlist-action-btn:active,
   .artist-banner-fav-btn:active,
+  .mobile-lyric-tool-btn:active,
+  .mobile-sheet-delete-btn:active,
   .clear-playlist-btn:active {
     transform: scale(0.94) !important;
     opacity: 0.82 !important;

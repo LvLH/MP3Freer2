@@ -98,15 +98,18 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
 
   return (
     <div className="player-bar">
-      {/* 移动端极简顶部进度指示条（点击可粗调进度，不必进全屏页） */}
-      <div
-        className="mobile-player-progress-bg"
-        onClick={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-          if (duration > 0) seekTo(ratio * duration);
-        }}
-      >
+      {/* 移动端极简顶部可拖动进度指示条 */}
+      <div className="mobile-player-progress-wrap">
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          step={0.1}
+          value={currentTime}
+          onChange={handleProgressChange}
+          className="mobile-player-progress-input"
+          title="拖动调整播放进度"
+        />
         <div
           className="mobile-player-progress-fill"
           style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
@@ -114,8 +117,8 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
       </div>
 
       {/* 左侧：歌曲信息 */}
-      <div className="player-left" onClick={onToggleFullscreen} style={{ cursor: 'pointer' }}>
-        <div className="player-cover-container" title="点击展开全屏歌词">
+      <div className="player-left">
+        <div className="player-cover-container" onClick={onToggleFullscreen} style={{ cursor: 'pointer' }} title="点击展开全屏歌词">
           {(currentSong?.pic && !imageError) ? (
             <img
               src={currentSong.pic.startsWith('http://')
@@ -132,10 +135,22 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
             </div>
           )}
         </div>
-        <div className="player-info">
-          <span className="player-title" title={currentSong?.name || '未在播放'}>
-            {currentSong?.name || '听你想听的歌'}
-          </span>
+        <div className="player-info" onClick={e => e.stopPropagation()}>
+          <div className="player-title-wrap">
+            <span
+              className={`player-title ${currentSong?.name && currentSong.name.length > 10 ? 'marquee-scroll' : ''}`}
+              title={currentSong?.name || '未在播放'}
+              onClick={() => {
+                if (currentSong?.artist) {
+                  const firstArtist = currentSong.artist.split(/[/,&，、]/)[0].trim();
+                  if (firstArtist) triggerGlobalSearch(firstArtist);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              {currentSong?.name || '听你想听的歌'}
+            </span>
+          </div>
           <span className="player-artist" title={currentSong?.artist || 'MP3Freer'}>
             {currentSong?.artist ? (
               currentSong.artist.split(/[/,&，、]/).map((a, i, arr) => {
@@ -157,21 +172,21 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
       {/* 中间：播放控制与进度条 */}
       <div className="player-center">
         <div className="player-controls">
-          <button className="control-btn mobile-hide-btn" onClick={prevSong} title="上一首">
-            <SkipBack size={20} fill="currentColor" />
+          <button className="control-btn mobile-keep-btn" onClick={prevSong} title="上一首">
+            <SkipBack size={18} fill="currentColor" />
           </button>
 
-          <button className="control-btn play-pause" onClick={togglePlay} title={isLoading ? '加载中' : isPlaying ? '暂停' : '播放'} disabled={isLoading}>
+          <button className="control-btn play-pause mobile-keep-btn" onClick={togglePlay} title={isLoading ? '加载中' : isPlaying ? '暂停' : '播放'} disabled={isLoading}>
             {isLoading
-              ? <Loader2 size={20} className="animate-spin" />
+              ? <Loader2 size={18} className="animate-spin" />
               : isPlaying
-                ? <Pause size={20} fill="currentColor" />
-                : <Play size={20} fill="currentColor" style={{ marginLeft: 3 }} />
+                ? <Pause size={18} fill="currentColor" />
+                : <Play size={18} fill="currentColor" style={{ marginLeft: 2 }} />
             }
           </button>
 
-          <button className="control-btn" onClick={nextSong} title="下一首">
-            <SkipForward size={20} fill="currentColor" />
+          <button className="control-btn mobile-keep-btn" onClick={nextSong} title="下一首">
+            <SkipForward size={18} fill="currentColor" />
           </button>
         </div>
 
@@ -219,7 +234,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
           <Heart size={16} fill={currentSong && isFavorite(currentSong.id) ? '#ef4444' : 'none'} />
         </button>
 
-        <button className="control-btn mobile-hide-btn" onClick={changePlayMode} title={getPlayModeTitle()}>
+        <button className="control-btn mobile-keep-btn" onClick={changePlayMode} title={getPlayModeTitle()}>
           {playMode === 'single-loop' && <Repeat size={16} className="text-purple" />}
           {playMode === 'random' && <Shuffle size={16} />}
           {playMode === 'list-loop' && <RefreshCw size={16} />}

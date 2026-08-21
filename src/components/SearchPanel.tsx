@@ -90,13 +90,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
         scrollContainerRef.current.scrollTop = 0;
       }
 
-      const source = getDefaultSearchSource();
-      MusicApiService.searchSongs(term, source, 1)
-        .then((results: any) => {
-          setSongResults(results);
-          setPlaylistResults([]);
-          setHasMore(results.length >= PAGE_SIZE);
-        })
+      searchTracks(term, 1, false)
         .catch((err: any) => {
           console.error(err);
           toast.error(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
@@ -457,8 +451,10 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             <div className="detail-header">
               <CoverImage src={selectedPlaylist.cover} alt="" className="detail-cover" />
               <div className="detail-info">
-                <span className="detail-tag">{TEXT.playlistTag}</span>
-                <h2 className="detail-title">{selectedPlaylist.name}</h2>
+                <div className="detail-title-row">
+                  <h2 className="detail-title">{selectedPlaylist.name}</h2>
+                  <span className="detail-tag">网易云</span>
+                </div>
                 <span className="detail-author">{TEXT.creator} {selectedPlaylist.creatorName || TEXT.unknown}</span>
                 <div className="detail-action-btns">
                   <button className="primary-btn playlist-action-btn" onClick={() => playAll(selectedPlaylist.item.map(toPlayerSong))} title="播放全部">

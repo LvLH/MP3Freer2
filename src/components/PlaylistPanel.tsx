@@ -1,10 +1,9 @@
-import React, { useRef } from 'react';
-import { Play, Trash2, Music, X, ArrowUp } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Play, Trash2, Music, ArrowUp } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
-import { isMobileShell } from '../utils/platform';
 
 export const PlaylistPanel: React.FC = () => {
-  const { playlist, currentSong, playSong, removeFromPlaylist, clearPlaylist } = usePlayer();
+  const { playlist, playIndex, currentSong, playSong, removeFromPlaylist, clearPlaylist } = usePlayer();
 
   const formatSecs = (secs: number) => {
     if (!secs) return '00:00';
@@ -18,6 +17,58 @@ export const PlaylistPanel: React.FC = () => {
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // 队列打开或切歌时自动定位到当前播放歌曲位置（前面最多保留 3 首）
+  useEffect(() => {
+    if (scrollContainerRef.current && playlist.length > 0) {
+      const timer = setTimeout(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const listEl = container.querySelector('.song-list-container');
+        if (!listEl) return;
+        const targetIndex = Math.max(0, playIndex - 3);
+        const itemEl = listEl.children[targetIndex] as HTMLElement;
+        if (itemEl) {
+          container.scrollTo({ top: itemEl.offsetTop, behavior: 'smooth' });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [playIndex, playlist.length]);
+
+  // 左滑删除手势与淡出塌陷动效
+  const [swipedSongId, setSwipedSongId] = useState<string | null>(null);
+  const [deletingSongId, setDeletingSongId] = useState<string | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent, songId: string) => {
+    if (!touchStartRef.current) return;
+    const deltaX = e.touches[0].clientX - touchStartRef.current.x;
+    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 25) {
+      if (deltaX < -25) {
+        setSwipedSongId(songId);
+      } else if (deltaX > 25 && swipedSongId === songId) {
+        setSwipedSongId(null);
+      }
+    }
+  };
+
+  const handleDeleteSong = (e: React.MouseEvent, songId: string) => {
+    e.stopPropagation();
+    setDeletingSongId(songId);
+    setTimeout(() => {
+      removeFromPlaylist(songId);
+      setDeletingSongId(null);
+      if (swipedSongId === songId) {
+        setSwipedSongId(null);
+      }
+    }, 280);
+  };
+
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="glass-card" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -28,7 +79,7 @@ export const PlaylistPanel: React.FC = () => {
           <div>
             <h2>正在播放列表</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
-              查看和管理当前排队播放的歌曲。
+              查看和管理当前排队播放的歌曲 ({playlist.length})。
             </p>
           </div>
         </div>
@@ -50,7 +101,7 @@ export const PlaylistPanel: React.FC = () => {
         )}
       </div>
 
-      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 24 }}>
+      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}>
         <div className="glass-card" style={{ minHeight: '100%' }}>
           {playlist.length === 0 ? (
             <div style={{ 
@@ -67,54 +118,54 @@ export const PlaylistPanel: React.FC = () => {
               <span style={{ fontSize: 11, color: 'var(--text-dark)' }}>可以前往本地歌曲或在线音乐中添加曲目</span>
             </div>
           ) : (
-            <div className="song-list-container">
-              {playlist.map((song, index) => (
-                <div 
-                  key={song.id} 
-                  className={`song-row ${currentSong?.id === song.id ? 'active' : ''}`}
-                  onClick={isMobileShell() ? () => playSong(song) : undefined}
-                  onDoubleClick={isMobileShell() ? undefined : () => playSong(song)}
-                >
-                  <div className="song-col-index">
-                    {currentSong?.id === song.id ? (
-                      <Play size={14} fill="var(--primary-color)" stroke="var(--primary-color)" />
-                    ) : (
-                      (index + 1).toString().padStart(2, '0')
+            <div className="song-list-container playlist-queue-container">
+              {playlist.map((song, index) => {
+                const isCurrent = currentSong?.id === song.id;
+                const isSwiped = swipedSongId === song.id;
+                const isDeleting = deletingSongId === song.id;
+
+                return (
+                  <div
+                    key={`${song.id}_${index}`}
+                    className={`queue-item-swipe-wrapper ${isDeleting ? 'deleting' : ''}`}
+                  >
+                    <div 
+                      className={`song-row queue-song-row ${isCurrent ? 'active' : ''} ${isSwiped ? 'swiped' : ''}`}
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={e => handleTouchMove(e, song.id)}
+                      onClick={() => playSong(song)}
+                    >
+                      <div className="song-col-index">
+                        {isCurrent ? (
+                          <Play size={14} fill="var(--primary-color)" stroke="var(--primary-color)" />
+                        ) : (
+                          (index + 1).toString().padStart(2, '0')
+                        )}
+                      </div>
+                      <div className="song-col-info">
+                        <div className="song-title-row">
+                          <span className="song-name" style={{ color: isCurrent ? 'var(--primary-hover)' : 'inherit' }} title={song.name}>
+                            {song.name}
+                          </span>
+                        </div>
+                        <span className="song-artist" title={song.artist}>{song.artist}</span>
+                      </div>
+                      <div className="song-col-album">{song.album}</div>
+                      <div className="song-col-duration">{formatSecs(song.duration)}</div>
+                    </div>
+                    {isSwiped && (
+                      <button
+                        className="mobile-sheet-delete-btn"
+                        onClick={e => handleDeleteSong(e, song.id)}
+                        title="从队列中删除"
+                      >
+                        <Trash2 size={16} />
+                        <span>删除</span>
+                      </button>
                     )}
                   </div>
-                  <div className="song-col-info">
-                    <div className="song-title-row">
-                      <span className="song-name" style={{ color: currentSong?.id === song.id ? 'var(--primary-hover)' : 'inherit' }}>
-                        {song.name}
-                      </span>
-                      <span className="tag-source">
-                        {song.isLocal ? '本地' : song.source === 'netease' ? '网易云' : song.source === 'tencent' ? 'QQ' : song.source}
-                      </span>
-                    </div>
-                    <span className="song-artist">{song.artist}</span>
-                  </div>
-                  <div className="song-col-album">{song.album}</div>
-                  <div className="song-col-duration">{formatSecs(song.duration)}</div>
-
-                  <div className="song-row-actions">
-                    <button 
-                      className="song-row-action-btn"
-                      onClick={() => playSong(song)}
-                      title="立即播放"
-                    >
-                      <Play size={14} fill="currentColor" />
-                    </button>
-                    <button 
-                      className="song-row-action-btn"
-                      onClick={() => removeFromPlaylist(song.id)}
-                      title="移出列表"
-                      style={{ color: '#f87171' }}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

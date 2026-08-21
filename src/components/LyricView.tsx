@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ListMusic, SkipBack, SkipForward, Play, Pause } from 'lucide-react';
+import { ChevronDown, ListMusic, SkipBack, SkipForward, Play, Pause, ArrowLeftRight, Trash2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
 import defaultCoverIcon from '../assets/default-cover.png';
@@ -13,14 +13,89 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
   const {
     currentSong, lyrics, currentLyricIndex, seekTo,
     playlist, playIndex, playSong, togglePlay, prevSong, nextSong,
-    showTranslation,
+    showTranslation, removeFromPlaylist,
   } = usePlayer();
   // 播放进度/状态走独立 store，避免随 usePlayer 的其它字段一起重渲染
   const { currentTime, duration, isPlaying } = usePlaybackProgress();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
+  const playlistSheetListRef = useRef<HTMLDivElement | null>(null);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
+
+  // 歌词界面工具按钮对齐位置（'left' | 'right'），带 localStorage 持久化记忆
+  const [buttonAlign, setButtonAlign] = useState<'left' | 'right'>(() => {
+    try {
+      return (localStorage.getItem('mp3freer_lyric_buttons_align') as 'left' | 'right') || 'left';
+    } catch {
+      return 'left';
+    }
+  });
+
+  const toggleButtonAlign = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = buttonAlign === 'left' ? 'right' : 'left';
+    setButtonAlign(next);
+    try {
+      localStorage.setItem('mp3freer_lyric_buttons_align', next);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // 抽屉列表打开时自动定位到当前播放歌曲（前留最多 3 首）
+  useEffect(() => {
+    if (isPlaylistOpen && playlistSheetListRef.current) {
+      const timer = setTimeout(() => {
+        const container = playlistSheetListRef.current;
+        if (!container) return;
+        const targetIndex = Math.max(0, playIndex - 3);
+        const itemEl = container.children[targetIndex] as HTMLElement;
+        if (itemEl) {
+          container.scrollTo({ top: itemEl.offsetTop, behavior: 'smooth' });
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isPlaylistOpen, playIndex]);
+
+  // 左滑删除歌曲手势与淡出动效状态
+  const [swipedSongId, setSwipedSongId] = useState<string | null>(null);
+  const [deletingSongId, setDeletingSongId] = useState<string | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent, songId: string) => {
+    if (!touchStartRef.current) return;
+    const deltaX = e.touches[0].clientX - touchStartRef.current.x;
+    const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 25) {
+      if (deltaX < -25) {
+        setSwipedSongId(songId);
+      } else if (deltaX > 25 && swipedSongId === songId) {
+        setSwipedSongId(null);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchStartRef.current = null;
+  };
+
+  const handleDeleteSong = (e: React.MouseEvent, songId: string) => {
+    e.stopPropagation();
+    setDeletingSongId(songId);
+    setTimeout(() => {
+      removeFromPlaylist(songId);
+      setDeletingSongId(null);
+      if (swipedSongId === songId) {
+        setSwipedSongId(null);
+      }
+    }, 280);
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -124,22 +199,12 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
         style={{ backgroundImage: `url(${songCover})` }}
       ></div>
 
-      {/* 移动端顶部标题栏 */}
+      {/* 移动端顶部标题栏（纯居中歌名/歌手信息） */}
       <div className="mobile-lyric-header">
-        <button className="mobile-lyric-back-btn" onClick={onClose} title="收起歌词">
-          <ChevronDown size={26} />
-        </button>
         <div className="mobile-lyric-title-info">
           <div className="mobile-lyric-song-name">{currentSong?.name || '未知曲目'}</div>
           <div className="mobile-lyric-song-artist">{currentSong?.artist || '未知歌手'}</div>
         </div>
-        <button 
-          className="mobile-lyric-queue-btn"
-          onClick={() => setIsPlaylistOpen(prev => !prev)}
-          title="播放队列"
-        >
-          <ListMusic size={22} />
-        </button>
       </div>
 
       {/* PC 端传统关闭按钮 */}
@@ -318,6 +383,19 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
               <SkipForward size={24} />
             </button>
           </div>
+
+          {/* 移动端左下/右下角浮动工具按钮组 */}
+          <div className={`mobile-lyric-corner-tools align-${buttonAlign}`}>
+            <button className="mobile-lyric-tool-btn" onClick={onClose} title="收起歌词">
+              <ChevronDown size={22} />
+            </button>
+            <button className="mobile-lyric-tool-btn" onClick={() => setIsPlaylistOpen(prev => !prev)} title="播放队列">
+              <ListMusic size={20} />
+            </button>
+            <button className="mobile-lyric-tool-btn" onClick={toggleButtonAlign} title={buttonAlign === 'left' ? '切换到右侧' : '切换到左侧'}>
+              <ArrowLeftRight size={18} />
+            </button>
+          </div>
         </div>
 
         {/* 移动端底部抽屉播放列表 */}
@@ -330,20 +408,43 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
                   <ChevronDown size={22} />
                 </button>
               </div>
-              <div className="mobile-playlist-sheet-list">
-                {playlist.map((song, i) => (
-                  <div
-                    key={`${song.id}_${i}`}
-                    className={`mobile-playlist-sheet-item ${i === playIndex ? 'playing' : ''}`}
-                    onClick={() => {
-                      void playSong(song);
-                      setIsPlaylistOpen(false);
-                    }}
-                  >
-                    <div className="mobile-sheet-song-name">{song.name}</div>
-                    <div className="mobile-sheet-song-artist">{song.artist}</div>
-                  </div>
-                ))}
+              <div className="mobile-playlist-sheet-list" ref={playlistSheetListRef}>
+                {playlist.map((song, i) => {
+                  const isCurrent = i === playIndex;
+                  const isSwiped = swipedSongId === song.id;
+                  const isDeleting = deletingSongId === song.id;
+
+                  return (
+                    <div
+                      key={`${song.id}_${i}`}
+                      className={`mobile-playlist-sheet-item-wrapper ${isDeleting ? 'deleting' : ''}`}
+                    >
+                      <div
+                        className={`mobile-playlist-sheet-item ${isCurrent ? 'playing' : ''} ${isSwiped ? 'swiped' : ''}`}
+                        onTouchStart={handleTouchStart}
+                        onTouchMove={e => handleTouchMove(e, song.id)}
+                        onTouchEnd={handleTouchEnd}
+                        onClick={() => {
+                          void playSong(song);
+                          setIsPlaylistOpen(false);
+                        }}
+                      >
+                        <div className="mobile-sheet-song-name" title={song.name}>{song.name}</div>
+                        <div className="mobile-sheet-song-artist" title={song.artist}>{song.artist}</div>
+                      </div>
+                      {isSwiped && (
+                        <button
+                          className="mobile-sheet-delete-btn"
+                          onClick={e => handleDeleteSong(e, song.id)}
+                          title="从队列中删除"
+                        >
+                          <Trash2 size={16} />
+                          <span>删除</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
