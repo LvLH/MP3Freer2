@@ -1,15 +1,52 @@
 package com.rog.mp3freer
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
+import java.net.URL
+import java.util.concurrent.Executors
 
 class MainActivity : TauriActivity() {
+  private var webView: WebView? = null
+  private var mediaSession: MediaSessionCompat? = null
+  private var notificationManager: NotificationManager? = null
+  private val CHANNEL_ID = "mp3freer_playback_channel"
+  private val NOTIFICATION_ID = 10086
+  private val bgExecutor = Executors.newSingleThreadExecutor()
+  private val mainHandler = Handler(Looper.getMainLooper())
+  private var lastCoverUrl: String = ""
+  private var lastCoverBitmap: Bitmap? = null
+
+  private val mediaReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      when (intent?.action) {
+        "com.rog.mp3freer.ACTION_PREV" -> dispatchMediaAction("prev")
+        "com.rog.mp3freer.ACTION_TOGGLE" -> dispatchMediaAction("toggle")
+        "com.rog.mp3freer.ACTION_NEXT" -> dispatchMediaAction("next")
+      }
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
-    // 不用 edge-to-edge：部分车机 insets 异常会导致内容区不可见
     super.onCreate(savedInstanceState)
 
     try {
@@ -18,9 +55,24 @@ class MainActivity : TauriActivity() {
       // ignore
     }
 
-    // 开启 GPU 硬件加速（支持 60~120Hz 高刷新率丝滑渲染）；配置媒体后台流畅播放
-    Handler(Looper.getMainLooper()).postDelayed({
+    initMediaSession()
+    createNotificationChannel()
+
+    val filter = IntentFilter().apply {
+      addAction("com.rog.mp3freer.ACTION_PREV")
+      addAction("com.rog.mp3freer.ACTION_TOGGLE")
+      addAction("com.rog.mp3freer.ACTION_NEXT")
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      registerReceiver(mediaReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+    } else {
+      registerReceiver(mediaReceiver, filter)
+    }
+
+    // 开启 GPU 硬件加速；配置媒体后台流畅播放；注入原生 MediaBridge
+    mainHandler.postDelayed({
       val wv = findWebView(window.decorView) ?: return@postDelayed
+      webView = wv
       wv.setBackgroundColor(0xFF0F0A1A.toInt())
       wv.setLayerType(View.LAYER_TYPE_HARDWARE, null)
       try {
@@ -28,10 +80,211 @@ class MainActivity : TauriActivity() {
         wv.settings.domStorageEnabled = true
         wv.settings.databaseEnabled = true
         wv.settings.setNeedInitialFocus(false)
+        wv.addJavascriptInterface(AndroidMediaBridge(), "AndroidMediaBridge")
       } catch (_: Throwable) {
         // ignore
       }
     }, 100)
+  }
+
+  override fun onDestroy() {
+    try {
+      unregisterReceiver(mediaReceiver)
+    } catch (_: Throwable) {}
+    mediaSession?.release()
+    notificationManager?.cancel(NOTIFICATION_ID)
+    super.onDestroy()
+  }
+
+  private fun initMediaSession() {
+    mediaSession = MediaSessionCompat(this, "MP3FreerMediaSession").apply {
+      setFlags(
+        MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+        MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+      )
+      setCallback(object : MediaSessionCompat.Callback() {
+        override fun onPlay() = dispatchMediaAction("play")
+        override fun onPause() = dispatchMediaAction("pause")
+        override fun onSkipToNext() = dispatchMediaAction("next")
+        override fun onSkipToPrevious() = dispatchMediaAction("prev")
+        override fun onStop() = dispatchMediaAction("pause")
+        override fun onSeekTo(pos: Long) {
+          mainHandler.post {
+            val secs = pos / 1000
+            webView?.evaluateJavascript(
+              "window.dispatchEvent(new CustomEvent('nativeMediaAction', { detail: { action: 'seek', position: $secs } }));",
+              null
+            )
+          }
+        }
+      })
+      isActive = true
+    }
+    notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+  }
+
+  private fun createNotificationChannel() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val channel = NotificationChannel(
+        CHANNEL_ID,
+        "音乐播放控制",
+        NotificationManager.IMPORTANCE_LOW
+      ).apply {
+        description = "在锁屏和通知栏显示播放控制器"
+        setShowBadge(false)
+        setSound(null, null)
+        enableVibration(false)
+      }
+      notificationManager?.createNotificationChannel(channel)
+    }
+  }
+
+  private fun dispatchMediaAction(action: String) {
+    mainHandler.post {
+      webView?.evaluateJavascript(
+        "window.dispatchEvent(new CustomEvent('nativeMediaAction', { detail: '$action' }));",
+        null
+      )
+    }
+  }
+
+  private fun updateNotification(
+    title: String,
+    artist: String,
+    coverUrl: String,
+    isPlaying: Boolean,
+    durationMs: Long,
+    positionMs: Long
+  ) {
+    val session = mediaSession ?: return
+
+    // 更新系统 MediaSession 播放状态与元数据
+    val state = if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED
+    val actions = PlaybackStateCompat.ACTION_PLAY or
+      PlaybackStateCompat.ACTION_PAUSE or
+      PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+      PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+      PlaybackStateCompat.ACTION_SEEK_TO or
+      PlaybackStateCompat.ACTION_PLAY_PAUSE
+
+    session.setPlaybackState(
+      PlaybackStateCompat.Builder()
+        .setActions(actions)
+        .setState(state, positionMs, 1.0f)
+        .build()
+    )
+
+    fun buildAndNotify(coverBitmap: Bitmap?) {
+      val metadataBuilder = MediaMetadataCompat.Builder()
+        .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+        .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+        .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
+      if (coverBitmap != null) {
+        metadataBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, coverBitmap)
+      }
+      session.setMetadata(metadataBuilder.build())
+
+      val contentIntent = PendingIntent.getActivity(
+        this,
+        0,
+        Intent(this, MainActivity::class.java).apply {
+          flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        },
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+
+      val prevIntent = PendingIntent.getBroadcast(
+        this,
+        1,
+        Intent("com.rog.mp3freer.ACTION_PREV"),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+      val toggleIntent = PendingIntent.getBroadcast(
+        this,
+        2,
+        Intent("com.rog.mp3freer.ACTION_TOGGLE"),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+      val nextIntent = PendingIntent.getBroadcast(
+        this,
+        3,
+        Intent("com.rog.mp3freer.ACTION_NEXT"),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+      )
+
+      val notifBuilder = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentTitle(title)
+        .setContentText(artist)
+        .setContentIntent(contentIntent)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setOngoing(isPlaying)
+        .setOnlyAlertOnce(true)
+        .addAction(android.R.drawable.ic_media_previous, "上一首", prevIntent)
+        .addAction(
+          if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+          if (isPlaying) "暂停" else "播放",
+          toggleIntent
+        )
+        .addAction(android.R.drawable.ic_media_next, "下一首", nextIntent)
+        .setStyle(
+          MediaStyle()
+            .setMediaSession(session.sessionToken)
+            .setShowActionsInCompactView(0, 1, 2)
+        )
+
+      if (coverBitmap != null) {
+        notifBuilder.setLargeIcon(coverBitmap)
+      }
+
+      notificationManager?.notify(NOTIFICATION_ID, notifBuilder.build())
+    }
+
+    if (coverUrl.isNotEmpty() && coverUrl != lastCoverUrl) {
+      bgExecutor.execute {
+        try {
+          val stream = URL(coverUrl).openStream()
+          val bitmap = BitmapFactory.decodeStream(stream)
+          lastCoverUrl = coverUrl
+          lastCoverBitmap = bitmap
+          mainHandler.post { buildAndNotify(bitmap) }
+        } catch (_: Throwable) {
+          mainHandler.post { buildAndNotify(lastCoverBitmap) }
+        }
+      }
+    } else {
+      buildAndNotify(lastCoverBitmap)
+    }
+  }
+
+  inner class AndroidMediaBridge {
+    @JavascriptInterface
+    fun updateMedia(
+      title: String?,
+      artist: String?,
+      coverUrl: String?,
+      isPlaying: Boolean,
+      durationSec: Double,
+      currentSec: Double
+    ) {
+      val sTitle = title ?: "MP3Freer"
+      val sArtist = artist ?: "自由听音乐"
+      val sCover = coverUrl ?: ""
+      val dMs = (durationSec * 1000).toLong()
+      val pMs = (currentSec * 1000).toLong()
+
+      mainHandler.post {
+        updateNotification(sTitle, sArtist, sCover, isPlaying, dMs, pMs)
+      }
+    }
+
+    @JavascriptInterface
+    fun clearMedia() {
+      mainHandler.post {
+        notificationManager?.cancel(NOTIFICATION_ID)
+        mediaSession?.isActive = false
+      }
+    }
   }
 
   private fun findWebView(view: View): WebView? {

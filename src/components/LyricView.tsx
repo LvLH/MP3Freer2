@@ -383,19 +383,19 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
               <SkipForward size={24} />
             </button>
           </div>
+        </div>
 
-          {/* 移动端左下/右下角浮动工具按钮组 */}
-          <div className={`mobile-lyric-corner-tools align-${buttonAlign}`}>
-            <button className="mobile-lyric-tool-btn" onClick={onClose} title="收起歌词">
-              <ChevronDown size={22} />
-            </button>
-            <button className="mobile-lyric-tool-btn" onClick={() => setIsPlaylistOpen(prev => !prev)} title="播放队列">
-              <ListMusic size={20} />
-            </button>
-            <button className="mobile-lyric-tool-btn" onClick={toggleButtonAlign} title={buttonAlign === 'left' ? '切换到右侧' : '切换到左侧'}>
-              <ArrowLeftRight size={18} />
-            </button>
-          </div>
+        {/* 移动端左下/右下角浮动工具按钮组（默认竖向一列排布于左下角） */}
+        <div className={`mobile-lyric-corner-tools align-${buttonAlign}`}>
+          <button className="mobile-lyric-tool-btn" onClick={onClose} title="收起歌词">
+            <ChevronDown size={22} />
+          </button>
+          <button className="mobile-lyric-tool-btn" onClick={() => setIsPlaylistOpen(prev => !prev)} title="播放队列">
+            <ListMusic size={20} />
+          </button>
+          <button className="mobile-lyric-tool-btn" onClick={toggleButtonAlign} title={buttonAlign === 'left' ? '切换到右侧' : '切换到左侧'}>
+            <ArrowLeftRight size={18} />
+          </button>
         </div>
 
         {/* 移动端底部抽屉播放列表 */}
