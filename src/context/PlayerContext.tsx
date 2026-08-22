@@ -356,23 +356,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateMediaSessionPlaybackState(isPlayingProgress);
   }, [isPlayingProgress]);
 
-  useEffect(() => {
-    storage.setString(StorageKeys.CURRENT_PLAYINDEX, String(playIndex));
-    // 切歌时重置歌词偏移；进度/歌词在 loadSongDetails 里复位，避免此处清空后 canplay 未触发导致歌词停住
-    setLyricOffset(0);
-    rawLyricDataRef.current = { original: '', translated: '', romanized: '' };
-    if (playIndex >= 0 && playIndex < playlist.length) {
-      const song = playlist[playIndex];
-      setCurrentSong(song);
-      void loadSongDetails(song);
-    } else {
-      setCurrentSong(null);
-      setLyrics([]);
-      playIntentRef.current = false;
-      playbackActions.reset();
-    }
-  }, [playIndex, playIndex >= 0 && playIndex < playlist.length ? playlist[playIndex].id : undefined]);
-
   const prefetchNextSong = (currentIndex: number) => {
     const pl = playlistRef.current;
     if (!pl || pl.length <= 1) return;
@@ -392,6 +375,48 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     }
   };
+
+  /**
+   * 核心切歌方法：直接触发 loadSongDetails，无需经过 React 渲染帧被动调度，
+   * 彻底解决手机锁屏/后台休眠期间 React useEffect 调度被挂起导致的连播中断。
+   */
+  const playSongAtIndex = (targetIndex: number, options: { forceReplay?: boolean } = {}) => {
+    const pl = playlistRef.current;
+    if (pl.length === 0 || targetIndex < 0 || targetIndex >= pl.length) return;
+
+    const targetSong = pl[targetIndex];
+    const isSameIndex = targetIndex === playIndexRef.current;
+
+    playIndexRef.current = targetIndex;
+    setPlayIndex(targetIndex);
+    setCurrentSong(targetSong);
+    playIntentRef.current = true;
+    isPlayingRef.current = true;
+    playbackActions.setIsPlaying(true);
+    setLyricOffset(0);
+    rawLyricDataRef.current = { original: '', translated: '', romanized: '' };
+    storage.setString(StorageKeys.CURRENT_PLAYINDEX, String(targetIndex));
+
+    if (isSameIndex && !options.forceReplay && audioRef.current && audioRef.current.src && !audioRef.current.error) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(console.error);
+    } else {
+      void loadSongDetails(targetSong);
+    }
+  };
+
+  // 仅在首次启动或外部清空歌单时作为保底同步
+  useEffect(() => {
+    storage.setString(StorageKeys.CURRENT_PLAYINDEX, String(playIndex));
+    if (playIndex < 0 || playIndex >= playlist.length) {
+      if (playlist.length === 0) {
+        setCurrentSong(null);
+        setLyrics([]);
+        playIntentRef.current = false;
+        playbackActions.reset();
+      }
+    }
+  }, [playIndex, playlist.length]);
 
   const scheduleAutoSkip = (reason: string) => {
     if (autoSkipTimerRef.current) return;
@@ -670,33 +695,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const pl = playlistRef.current;
     if (pl.length === 0) return;
 
-    setPlayIndex(prevIdx => {
-      const nextIdx = playModeRef.current === 'random'
-        ? Math.floor(Math.random() * pl.length)
-        : (prevIdx + 1) % pl.length;
+    const nextIdx = playModeRef.current === 'random'
+      ? Math.floor(Math.random() * pl.length)
+      : (playIndexRef.current + 1) % pl.length;
 
-      // 队列仅 1 首或随机抽到同一首时，index 不变不会触发 effect，需手动重播
-      if (nextIdx === prevIdx) {
-        queueMicrotask(() => {
-          const audio = audioRef.current;
-          if (!audio) return;
-          audio.currentTime = 0;
-          playIntentRef.current = true;
-          isPlayingRef.current = true;
-          playbackActions.setIsPlaying(true);
-          audio.play()
-            .catch(console.error)
-            .finally(() => {
-              // 重播后解除 guard，允许下次自然结束再次触发（此路径不经 loadSongDetails）
-              endedGuardRef.current = false;
-            });
-        });
-      }
-
-      isPlayingRef.current = true;
-      playbackActions.setIsPlaying(true);
-      return nextIdx;
-    });
+    playSongAtIndex(nextIdx, { forceReplay: true });
   };
 
   // 记录播放历史（去重：同一首歌 5 秒内不重复记录）
@@ -814,27 +817,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const playSong = async (song: Song) => {
-    // 历史在 canplay 成功时记录，覆盖手动点播与自动连播
     playIntentRef.current = true;
-    const idx = playlist.findIndex(s => s.id === song.id);
+    const pl = playlistRef.current;
+    const idx = pl.findIndex(s => s.id === song.id);
     if (idx >= 0) {
-      if (idx === playIndex && currentSong?.id === song.id) {
-        isPlayingRef.current = true;
-        playbackActions.setIsPlaying(true);
-        audioRef.current?.play().catch(console.error);
-      } else {
-        setPlayIndex(idx);
-        isPlayingRef.current = true;
-        playbackActions.setIsPlaying(true);
-      }
+      playSongAtIndex(idx);
       return;
     }
 
-    const newPlaylist = [...playlist, song];
+    const newPlaylist = [...pl, song];
+    playlistRef.current = newPlaylist;
     setPlaylist(newPlaylist);
-    setPlayIndex(newPlaylist.length - 1);
-    isPlayingRef.current = true;
-    playbackActions.setIsPlaying(true);
+    playSongAtIndex(newPlaylist.length - 1, { forceReplay: true });
   };
 
   const togglePlay = () => {
@@ -884,41 +878,23 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const nextSong = () => {
-    if (playlist.length === 0) return;
+    const pl = playlistRef.current;
+    if (pl.length === 0) return;
     playIntentRef.current = true;
-    const nextIdx = playMode === 'random'
-      ? Math.floor(Math.random() * playlist.length)
-      : (playIndex + 1) % playlist.length;
-
-    if (nextIdx === playIndex) {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(console.error);
-      }
-    } else {
-      setPlayIndex(nextIdx);
-    }
-    isPlayingRef.current = true;
-    playbackActions.setIsPlaying(true);
+    const nextIdx = playModeRef.current === 'random'
+      ? Math.floor(Math.random() * pl.length)
+      : (playIndexRef.current + 1) % pl.length;
+    playSongAtIndex(nextIdx, { forceReplay: true });
   };
 
   const prevSong = () => {
-    if (playlist.length === 0) return;
+    const pl = playlistRef.current;
+    if (pl.length === 0) return;
     playIntentRef.current = true;
-    const prevIdx = playMode === 'random'
-      ? Math.floor(Math.random() * playlist.length)
-      : (playIndex - 1 + playlist.length) % playlist.length;
-
-    if (prevIdx === playIndex) {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(console.error);
-      }
-    } else {
-      setPlayIndex(prevIdx);
-    }
-    isPlayingRef.current = true;
-    playbackActions.setIsPlaying(true);
+    const prevIdx = playModeRef.current === 'random'
+      ? Math.floor(Math.random() * pl.length)
+      : (playIndexRef.current - 1 + pl.length) % pl.length;
+    playSongAtIndex(prevIdx, { forceReplay: true });
   };
 
   const seekTo = (time: number) => {
@@ -976,51 +952,55 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const addToPlaylist = (song: Song, playImmediately = false) => {
-    const idx = playlist.findIndex(s => s.id === song.id);
+    const pl = playlistRef.current;
+    const idx = pl.findIndex(s => s.id === song.id);
     if (idx >= 0) {
       if (playImmediately) {
-        playIntentRef.current = true;
-        setPlayIndex(idx);
-        isPlayingRef.current = true;
-        playbackActions.setIsPlaying(true);
+        playSongAtIndex(idx);
       }
       return;
     }
 
-    const newPlaylist = [...playlist, song];
+    const newPlaylist = [...pl, song];
+    playlistRef.current = newPlaylist;
     setPlaylist(newPlaylist);
     if (playImmediately) {
-      playIntentRef.current = true;
-      setPlayIndex(newPlaylist.length - 1);
-      isPlayingRef.current = true;
-      playbackActions.setIsPlaying(true);
+      playSongAtIndex(newPlaylist.length - 1, { forceReplay: true });
     }
   };
 
   const removeFromPlaylist = (songId: string) => {
-    const idx = playlist.findIndex(s => s.id === songId);
+    const pl = playlistRef.current;
+    const idx = pl.findIndex(s => s.id === songId);
     if (idx < 0) return;
 
-    const newPlaylist = playlist.filter(s => s.id !== songId);
+    const newPlaylist = pl.filter(s => s.id !== songId);
+    playlistRef.current = newPlaylist;
     setPlaylist(newPlaylist);
 
     if (newPlaylist.length === 0) {
       playIntentRef.current = false;
       setPlayIndex(-1);
+      playIndexRef.current = -1;
       isPlayingRef.current = false;
       playbackActions.setIsPlaying(false);
       if (audioRef.current) audioRef.current.src = '';
-    } else if (idx === playIndex) {
-      setPlayIndex(idx >= newPlaylist.length ? 0 : idx);
-    } else if (idx < playIndex) {
-      setPlayIndex(playIndex - 1);
+    } else if (idx === playIndexRef.current) {
+      const nextIdx = idx >= newPlaylist.length ? 0 : idx;
+      playSongAtIndex(nextIdx);
+    } else if (idx < playIndexRef.current) {
+      const nextIdx = playIndexRef.current - 1;
+      playIndexRef.current = nextIdx;
+      setPlayIndex(nextIdx);
     }
   };
 
   const clearPlaylist = () => {
     playIntentRef.current = false;
+    playlistRef.current = [];
     setPlaylist([]);
     setPlayIndex(-1);
+    playIndexRef.current = -1;
     isPlayingRef.current = false;
     playbackActions.setIsPlaying(false);
     if (audioRef.current) audioRef.current.src = '';
@@ -1029,18 +1009,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const playAll = (songs: Song[]) => {
     if (songs.length === 0) return;
-    playIntentRef.current = true;
-    const sameFirstPlaying =
-      playIndex === 0 && playlist[0]?.id === songs[0]?.id;
+    playlistRef.current = songs;
     setPlaylist(songs);
-    isPlayingRef.current = true;
-    playbackActions.setIsPlaying(true);
-    if (sameFirstPlaying) {
-      audioRef.current?.play().catch(console.error);
-    } else {
-      // 始终显式切到 0；若本就在 0 且首曲 id 不同，依赖 effect 的 song.id 变化触发加载
-      setPlayIndex(0);
-    }
+    playSongAtIndex(0, { forceReplay: true });
   };
 
   const addAllToPlaylist = (songs: Song[]) => {

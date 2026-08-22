@@ -85,11 +85,40 @@ class MainActivity : TauriActivity() {
         wv.settings.domStorageEnabled = true
         wv.settings.databaseEnabled = true
         wv.settings.setNeedInitialFocus(false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, false)
+        }
         wv.addJavascriptInterface(AndroidMediaBridge(), "AndroidMediaBridge")
       } catch (_: Throwable) {
         // ignore
       }
     }, 100)
+  }
+
+  override fun onPause() {
+    super.onPause()
+    // 关键：Tauri/Android 基类默认在 onPause 时挂起 WebView。
+    // 为了支持锁屏与后台切歌连续播放，必须保持 WebView 与其 JS 定时器处于运行状态。
+    try {
+      webView?.onResume()
+      webView?.resumeTimers()
+    } catch (_: Throwable) {}
+  }
+
+  override fun onStop() {
+    super.onStop()
+    try {
+      webView?.onResume()
+      webView?.resumeTimers()
+    } catch (_: Throwable) {}
+  }
+
+  override fun onResume() {
+    super.onResume()
+    try {
+      webView?.onResume()
+      webView?.resumeTimers()
+    } catch (_: Throwable) {}
   }
 
   override fun onDestroy() {
