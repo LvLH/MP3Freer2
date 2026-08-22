@@ -66,7 +66,7 @@ export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
 
       ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
       ctx.font = '22px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillText(`基于 ${playHistory.length} 条播放记录 · MP3Freer 专属生成`, width / 2, 130);
+      ctx.fillText(`基于 ${playHistory.length} 条播放记录 · MP3韬 专属生成`, width / 2, 130);
 
       // 4. 2x2 统计卡片
       const cards = [
@@ -173,7 +173,7 @@ export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#a855f7';
       ctx.font = 'bold 22px sans-serif';
-      ctx.fillText('MP3Freer · 听你想听的歌', width / 2, footerY);
+      ctx.fillText('MP3韬 · 听你想听的歌', width / 2, footerY);
 
       ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.font = '16px sans-serif';
@@ -192,7 +192,7 @@ export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
     if (!posterUrl) return;
     const a = document.createElement('a');
     a.href = posterUrl;
-    a.download = `MP3Freer-听歌年报-${new Date().getFullYear()}.png`;
+    a.download = `MP3韬-听歌年报-${new Date().getFullYear()}.png`;
     a.click();
   };
 
@@ -390,7 +390,7 @@ export function YearlyReport({ isOpen, onClose }: YearlyReportProps) {
                   <Sparkles size={16} />
                   <span>{isGenerating ? '生成海报中...' : '生成年报海报'}</span>
                 </button>
-                <span className="report-footer-hint">MP3Freer · 你的音乐日记</span>
+                <span className="report-footer-hint">MP3韬 · 你的音乐日记</span>
               </footer>
             </>
           )}

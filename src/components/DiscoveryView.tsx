@@ -79,6 +79,29 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
     }
   }, [hqPool]);
 
+  const handleRandomCatClick = useCallback(async () => {
+    if (hqRefreshing) return;
+    setHqRefreshing(true);
+    try {
+      const otherCats = HQ_CATS.filter(c => c !== hqCat && c !== '全部');
+      const nextCat = otherCats[Math.floor(Math.random() * otherCats.length)] || '流行';
+      
+      const { playlists, lastUpdateTime } = await MusicApiService.getNeteaseHighQualityPlaylists({
+        limit: HQ_FETCH_LIMIT,
+        cat: nextCat,
+      });
+
+      setHqCat(nextCat);
+      setHqPool(playlists || []);
+      hqBeforeRef.current = lastUpdateTime;
+      setHqPlaylists(shufflePick(playlists || [], HQ_DISPLAY_COUNT));
+    } catch (e) {
+      console.error('Failed to change hq playlist category', e);
+    } finally {
+      setHqRefreshing(false);
+    }
+  }, [hqCat, hqRefreshing]);
+
   useEffect(() => {
     // 面板激活时拉取；15 分钟内重复进入复用缓存，避免每次切换侧边栏都打 4 个接口
     if (!active) return;
@@ -167,8 +190,29 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <Sparkles size={20} style={{ color: 'var(--primary-color)' }} />
             <h2 style={{ fontSize: 18, margin: 0 }}>精品推荐</h2>
-            {hqCat && hqCat !== '全部' && (
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{hqCat}</span>
+            {hqCat && (
+              <button
+                className="category-pill-btn"
+                onClick={() => void handleRandomCatClick()}
+                disabled={hqRefreshing}
+                title="点击随机切换其他风格歌单"
+                style={{
+                  fontSize: 12,
+                  color: 'var(--primary-color)',
+                  background: 'rgba(168, 85, 247, 0.12)',
+                  border: '1px solid rgba(168, 85, 247, 0.3)',
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <span>{hqCat === '全部' ? '精选' : hqCat}</span>
+                <span style={{ fontSize: 10, opacity: 0.7 }}>🎲</span>
+              </button>
             )}
             <button
               className="icon-btn"

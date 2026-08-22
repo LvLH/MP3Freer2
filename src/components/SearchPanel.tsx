@@ -451,9 +451,26 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             <div className="detail-header">
               <CoverImage src={selectedPlaylist.cover} alt="" className="detail-cover" />
               <div className="detail-info">
-                <div className="detail-title-row">
-                  <h2 className="detail-title">{selectedPlaylist.name}</h2>
-                  <span className="detail-tag">网易云</span>
+                <div className="detail-title-row" style={{ display: 'block', marginBottom: 4 }}>
+                  <h2 className="detail-title" style={{ display: 'inline', fontSize: 16, lineHeight: 1.4, margin: 0 }}>
+                    {selectedPlaylist.name}
+                    <span
+                      className="detail-tag"
+                      style={{
+                        display: 'inline-block',
+                        marginLeft: 6,
+                        verticalAlign: 'middle',
+                        fontSize: 10,
+                        padding: '1px 6px',
+                        borderRadius: 4,
+                        background: 'rgba(168, 85, 247, 0.15)',
+                        color: '#c084fc',
+                        border: '1px solid rgba(168, 85, 247, 0.3)',
+                      }}
+                    >
+                      {selectedPlaylist.item[0]?.source === 'tencent' ? 'QQ' : '网易云'}
+                    </span>
+                  </h2>
                 </div>
                 <span className="detail-author">{TEXT.creator} {selectedPlaylist.creatorName || TEXT.unknown}</span>
                 <div className="detail-action-btns">
@@ -480,7 +497,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                       color: isFavoritePlaylist(selectedPlaylist.id) ? '#ef4444' : undefined 
                     }}
                   >
-                    <Heart size={16} fill={isFavoritePlaylist(selectedPlaylist.id) ? 'currentColor' : 'none'} />
+                    <Heart size={16} fill={isFavoritePlaylist(selectedPlaylist.id) ? '#ef4444' : 'none'} />
                     <span className="btn-text">{isFavoritePlaylist(selectedPlaylist.id) ? "已收藏" : "收藏"}</span>
                   </button>
                 </div>
@@ -499,17 +516,63 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {(songResults.length > 0 || playlistResults.length > 0) && (
               <div className="glass-card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h3>{TEXT.result} {searchType === 'track' && `(${songResults.length}+)`}</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <h3
+                    onClick={() => {
+                      if (searchType === 'track') void loadMoreTracks();
+                      else if (searchType === 'playlist') void loadMorePlaylists();
+                    }}
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      margin: 0,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      userSelect: 'none',
+                    }}
+                    title="点击在末尾加载更多"
+                  >
+                    <span>{TEXT.result}</span>
+                    {searchType === 'track' && (
+                      <span style={{ color: 'var(--primary-color)', fontSize: 13, fontWeight: 500 }}>
+                        ({songResults.length}+)
+                      </span>
+                    )}
+                    {searchType === 'playlist' && (
+                      <span style={{ color: 'var(--primary-color)', fontSize: 13, fontWeight: 500 }}>
+                        ({playlistResults.length}+)
+                      </span>
+                    )}
+                  </h3>
                   {searchType === 'track' && songResults.length > 0 && (
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <button className="primary-btn" onClick={() => playAll(songResults.map(toPlayerSong))} style={{ borderRadius: 20, padding: '0 16px', height: 32, fontSize: 13 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        className="primary-btn"
+                        onClick={() => playAll(songResults.map(toPlayerSong))}
+                        style={{ borderRadius: '50%', width: 32, height: 32, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        title="播放全部"
+                      >
                         <Play size={14} fill="currentColor" />
-                        <span>播放全部</span>
                       </button>
-                      <button className="icon-btn" onClick={() => addAllToPlaylist(songResults.map(toPlayerSong))} title="全部添加到队列" style={{ borderRadius: 20, padding: '0 16px', height: 32, width: 'auto', gap: 6, background: 'rgba(255,255,255,0.05)', fontSize: 13 }}>
-                        <Plus size={14} />
-                        <span>添加全部</span>
+                      <button
+                        className="icon-btn"
+                        onClick={() => addAllToPlaylist(songResults.map(toPlayerSong))}
+                        title="全部添加到队列"
+                        style={{
+                          borderRadius: '50%',
+                          width: 32,
+                          height: 32,
+                          padding: 0,
+                          background: 'rgba(255,255,255,0.06)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Plus size={15} />
                       </button>
                     </div>
                   )}

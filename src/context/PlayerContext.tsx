@@ -589,6 +589,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // 资源已在缓冲里时 canplay 可能不会再发，主动补一次
       if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
         onCanPlay();
+      } else if (playIntentRef.current) {
+        // 息屏/锁屏休眠保障：主动发起 play() 请求让内核自动开始缓冲和播放，避免等待休眠期被抑制的 canplay 回调
+        startPlaybackIfNeeded();
       }
     } catch (err) {
       console.error('Error loading song details:', err);
@@ -917,9 +920,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const changePlayMode = () => {
     setPlayMode(prev => {
-      if (prev === 'list-loop') return 'single-loop';
-      if (prev === 'single-loop') return 'random';
-      return 'list-loop';
+      let next: PlayMode = 'list-loop';
+      if (prev === 'list-loop') next = 'single-loop';
+      else if (prev === 'single-loop') next = 'random';
+      else next = 'list-loop';
+
+      const modeLabels: Record<PlayMode, string> = {
+        'list-loop': '列表循环',
+        'single-loop': '单曲循环',
+        'random': '随机播放',
+      };
+      toast.info(`已切换为：${modeLabels[next]}`);
+      return next;
     });
   };
 

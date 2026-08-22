@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MP3Freer",
+  "productName": "MP3韬",
   "version": "26.8.21",
   "identifier": "com.rog.mp3freer",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "MP3Freer",
+        "title": "MP3韬",
         "width": 1100,
         "height": 700,
         "minWidth": 900,

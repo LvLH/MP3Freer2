@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  Repeat, RefreshCw, Shuffle, Maximize2, Loader2, Heart, MonitorSpeaker, Disc
+  Repeat, Repeat1, Shuffle, Maximize2, Loader2, Heart, MonitorSpeaker, Disc
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
@@ -157,7 +157,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
               {currentSong?.name || '听你想听的歌'}
             </span>
           </div>
-          <span className="player-artist" title={currentSong?.artist || 'MP3Freer'}>
+          <span className="player-artist" title={currentSong?.artist || 'MP3韬'}>
             {currentSong?.artist ? (
               currentSong.artist.split(/[/,&，、]/).map((a, i, arr) => {
                 const artistName = a.trim();
@@ -241,9 +241,9 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
         </button>
 
         <button className="control-btn mobile-keep-btn" onClick={changePlayMode} title={getPlayModeTitle()}>
-          {playMode === 'single-loop' && <Repeat size={16} className="text-purple" />}
-          {playMode === 'random' && <Shuffle size={16} />}
-          {playMode === 'list-loop' && <RefreshCw size={16} />}
+          {playMode === 'single-loop' && <Repeat1 size={16} style={{ color: 'var(--primary-color)' }} />}
+          {playMode === 'random' && <Shuffle size={16} style={{ color: 'var(--primary-color)' }} />}
+          {playMode === 'list-loop' && <Repeat size={16} />}
         </button>
 
         {/* 桌面歌词第二窗仅 Windows/macOS；Android 车机改用应用内全屏歌词 */}

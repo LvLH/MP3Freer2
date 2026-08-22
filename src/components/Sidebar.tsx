@@ -62,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
         <div className="logo-icon">
           <Disc size={18} className="spinning" />
         </div>
-        <span className="logo-title">MP3Freer</span>
+        <span className="logo-title">MP3韬</span>
       </div>
 
       {/* 桌面与车机宽屏导航列表 */}

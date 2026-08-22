@@ -70,7 +70,7 @@ export const AboutPanel: React.FC = () => {
           <Disc size={32} className="spinning" style={{ color: 'white' }} />
         </div>
         <div>
-          <h2>MP3Freer</h2>
+          <h2>MP3韬</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
             版本：v{APP_VERSION} | 基于 Tauri v2 的本地与在线音乐播放器。
           </p>
