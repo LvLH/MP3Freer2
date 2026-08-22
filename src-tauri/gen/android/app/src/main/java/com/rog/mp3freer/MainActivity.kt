@@ -9,10 +9,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -29,6 +31,9 @@ class MainActivity : TauriActivity() {
   private var webView: WebView? = null
   private var mediaSession: MediaSessionCompat? = null
   private var notificationManager: NotificationManager? = null
+  private var wakeLock: PowerManager.WakeLock? = null
+  private var wifiLock: WifiManager.WifiLock? = null
+  private val releaseLocksRunnable = Runnable { releaseLocksInternal() }
   private val CHANNEL_ID = "mp3freer_playback_channel"
   private val NOTIFICATION_ID = 10086
   private val bgExecutor = Executors.newSingleThreadExecutor()
@@ -91,6 +96,7 @@ class MainActivity : TauriActivity() {
     try {
       unregisterReceiver(mediaReceiver)
     } catch (_: Throwable) {}
+    releaseLocksImmediately()
     mediaSession?.release()
     notificationManager?.cancel(NOTIFICATION_ID)
     super.onDestroy()
@@ -257,6 +263,62 @@ class MainActivity : TauriActivity() {
     }
   }
 
+  private fun acquireLocks() {
+    mainHandler.removeCallbacks(releaseLocksRunnable)
+    try {
+      if (wakeLock == null) {
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MP3Freer::PlaybackWakeLock")?.apply {
+          setReferenceCounted(false)
+        }
+      }
+      if (wakeLock?.isHeld == false) {
+        wakeLock?.acquire(24 * 60 * 60 * 1000L)
+      }
+
+      if (wifiLock == null) {
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        val lockType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+        } else {
+          @Suppress("DEPRECATION")
+          WifiManager.WIFI_MODE_FULL
+        }
+        wifiLock = wm?.createWifiLock(lockType, "MP3Freer::PlaybackWifiLock")?.apply {
+          setReferenceCounted(false)
+        }
+      }
+      if (wifiLock?.isHeld == false) {
+        wifiLock?.acquire()
+      }
+    } catch (_: Throwable) {
+      // ignore
+    }
+  }
+
+  private fun releaseLocksDelayed(delayMs: Long = 60000L) {
+    mainHandler.removeCallbacks(releaseLocksRunnable)
+    mainHandler.postDelayed(releaseLocksRunnable, delayMs)
+  }
+
+  private fun releaseLocksImmediately() {
+    mainHandler.removeCallbacks(releaseLocksRunnable)
+    releaseLocksInternal()
+  }
+
+  private fun releaseLocksInternal() {
+    try {
+      if (wakeLock?.isHeld == true) {
+        wakeLock?.release()
+      }
+      if (wifiLock?.isHeld == true) {
+        wifiLock?.release()
+      }
+    } catch (_: Throwable) {
+      // ignore
+    }
+  }
+
   inner class AndroidMediaBridge {
     @JavascriptInterface
     fun updateMedia(
@@ -274,6 +336,11 @@ class MainActivity : TauriActivity() {
       val pMs = (currentSec * 1000).toLong()
 
       mainHandler.post {
+        if (isPlaying) {
+          acquireLocks()
+        } else {
+          releaseLocksDelayed(60000L)
+        }
         updateNotification(sTitle, sArtist, sCover, isPlaying, dMs, pMs)
       }
     }
@@ -281,6 +348,7 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun clearMedia() {
       mainHandler.post {
+        releaseLocksImmediately()
         notificationManager?.cancel(NOTIFICATION_ID)
         mediaSession?.isActive = false
       }

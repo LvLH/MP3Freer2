@@ -243,12 +243,25 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('Audio playback error:', e);
     };
 
+    const onVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        if (playIntentRef.current && audio.paused && audio.src) {
+          audio.play().catch(err => {
+            console.warn('Auto-resume playback on visibilitychange:', err);
+          });
+        }
+      }
+    };
+
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('durationchange', onDurationChange);
     audio.addEventListener('ended', onEnded);
     audio.addEventListener('play', onPlay);
     audio.addEventListener('pause', onPause);
     audio.addEventListener('error', onError);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
 
     const savedLocal = storage.getString(StorageKeys.LOCAL_SONGS);
     if (savedLocal) {
@@ -270,6 +283,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       audio.removeEventListener('play', onPlay);
       audio.removeEventListener('pause', onPause);
       audio.removeEventListener('error', onError);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
       audio.pause();
       if (autoSkipTimerRef.current) clearTimeout(autoSkipTimerRef.current);
     };
@@ -357,6 +373,26 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [playIndex, playIndex >= 0 && playIndex < playlist.length ? playlist[playIndex].id : undefined]);
 
+  const prefetchNextSong = (currentIndex: number) => {
+    const pl = playlistRef.current;
+    if (!pl || pl.length <= 1) return;
+    const nextIdx = playModeRef.current === 'random'
+      ? Math.floor(Math.random() * pl.length)
+      : (currentIndex + 1) % pl.length;
+    const nextSong = pl[nextIdx];
+    if (nextSong && !nextSong.isLocal) {
+      void resolveOnlinePlayUrl(nextSong).catch(() => {});
+      if (nextSong.pic_id) {
+        const cachedPic = resourceCache.getPic(nextSong.source, nextSong.pic_id);
+        if (!cachedPic) {
+          MusicApiService.getSongPic(nextSong.pic_id, nextSong.source)
+            .then(pic => { if (pic) resourceCache.setPic(nextSong.source, nextSong.pic_id!, pic); })
+            .catch(() => {});
+        }
+      }
+    }
+  };
+
   const scheduleAutoSkip = (reason: string) => {
     if (autoSkipTimerRef.current) return;
     console.log(`Auto-skipping to next song (${reason})...`);
@@ -401,6 +437,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     if (onCanPlayRef.current) {
       audio.removeEventListener('canplay', onCanPlayRef.current.canplay);
+      audio.removeEventListener('loadeddata', onCanPlayRef.current.canplay);
       audio.removeEventListener('error', onCanPlayRef.current.error);
       onCanPlayRef.current = null;
     }
@@ -409,7 +446,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     suppressPauseSyncRef.current = true;
     const wantPlay = playIntentRef.current || isPlayingRef.current;
     if (wantPlay) playIntentRef.current = true;
-    audio.pause();
     // 切歌时复位进度（store + 元素），避免旧 currentTime 套到新歌词上
     audio.currentTime = 0;
     playbackActions.setCurrentTime(0);
@@ -519,12 +555,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             playIntentRef.current = true;
             isPlayingRef.current = true;
             playbackActions.setIsPlaying(true);
+            prefetchNextSong(playIndexRef.current);
           })
           .catch(err => {
-            console.error('Playback start failed:', err);
-            playIntentRef.current = false;
-            isPlayingRef.current = false;
-            playbackActions.setIsPlaying(false);
+            console.warn('Playback start deferred or pending in background:', err);
+            // 注意：后台或息屏被拦截时不抹掉 playIntentRef，使 canplay / loadeddata / visibilitychange 能重新拉起
           })
           .finally(() => {
             releasePauseSuppress();
@@ -535,10 +570,14 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (currentSession !== playSessionIdRef.current) return;
         if (onCanPlayRef.current) {
           audio.removeEventListener('canplay', onCanPlayRef.current.canplay);
+          audio.removeEventListener('loadeddata', onCanPlayRef.current.canplay);
           audio.removeEventListener('error', onCanPlayRef.current.error);
           onCanPlayRef.current = null;
         }
         startPlaybackIfNeeded();
+        if (playIntentRef.current && audio.paused) {
+          audio.play().catch(e => console.warn('Retry play on canplay:', e));
+        }
       };
 
       const onError = () => {
@@ -579,6 +618,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       onCanPlayRef.current = { canplay: onCanPlay, error: onError };
       audio.addEventListener('canplay', onCanPlay);
+      audio.addEventListener('loadeddata', onCanPlay);
       audio.addEventListener('error', onError);
 
       // 先摘掉旧 src 再赋值，避免同源重复赋值时浏览器不触发 canplay（歌词/播放都会停住）
