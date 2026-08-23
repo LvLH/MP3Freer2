@@ -272,7 +272,13 @@ class MainActivity : TauriActivity() {
         notifBuilder.setLargeIcon(coverBitmap)
       }
 
-      notificationManager?.notify(NOTIFICATION_ID, notifBuilder.build())
+      val notif = notifBuilder.build()
+      if (isPlaying) {
+        MediaPlaybackService.start(this, notif)
+      } else {
+        MediaPlaybackService.stop(this)
+      }
+      notificationManager?.notify(NOTIFICATION_ID, notif)
     }
 
     if (coverUrl.isNotEmpty() && coverUrl != lastCoverUrl) {
@@ -377,6 +383,7 @@ class MainActivity : TauriActivity() {
     @JavascriptInterface
     fun clearMedia() {
       mainHandler.post {
+        MediaPlaybackService.stop(this@MainActivity)
         releaseLocksImmediately()
         notificationManager?.cancel(NOTIFICATION_ID)
         mediaSession?.isActive = false

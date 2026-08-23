@@ -471,12 +471,18 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       onCanPlayRef.current = null;
     }
 
+    // 彻底切断旧音频源，防止切歌网络等待期间泄漏旧曲片头
+    try {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    } catch (_e) {}
+
     // 整段加载期间忽略 pause 同步：pause()/换 src/load()/WebAudio 初始化都可能触发 pause
     suppressPauseSyncRef.current = true;
     const wantPlay = playIntentRef.current || isPlayingRef.current;
     if (wantPlay) playIntentRef.current = true;
-    // 切歌时复位进度（store + 元素），避免旧 currentTime 套到新歌词上
-    audio.currentTime = 0;
+    
     playbackActions.setCurrentTime(0);
     playbackActions.setDuration(0);
     if (wantPlay) {
