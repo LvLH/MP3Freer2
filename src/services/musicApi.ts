@@ -343,37 +343,142 @@ export const MusicApiService = {
     }
   },
 
-  async getSongUrl(songId: string, source: string, quality: AudioQuality | string = 'high'): Promise<string | null> {
-    // 兼容：若传入字符串档位 id（如 'high'）则映射；若直接是 br 数字字符串也接受
-    const br = typeof quality === 'string' && ['standard', 'high', 'lossless', 'hires'].includes(quality)
-      ? getQualityBr(quality as AudioQuality)
-      : String(quality);
-    try {
-      if (source === 'netease') {
-        try {
-          // 无损/Hi-Res 走官方 enhance 接口请求高码率
-          const neteaseBr = br === '1999' || br === '999' ? '999000' : '3200000';
-          const response = await universalFetch(`http://music.163.com/api/song/enhance/player/url?id=${songId}&ids=[${songId}]&br=${neteaseBr}`, {
-            headers: { 'Referer': 'http://music.163.com' }
-          });
-          if (response.ok) {
-            const data = await response.json();
-            if (data?.data?.[0]?.url) return data.data[0].url;
-          }
-        } catch (e) {
-          console.warn('Official getSongUrl failed', e);
+  async getSongUrl(
+    songId: string,
+    source: string,
+    quality: AudioQuality | string = 'high',
+    extraInfo?: { name?: string; singer?: string; artist?: string }
+  ): Promise<string | null> {
+    const candidates = await this.getSongUrlCandidates(songId, source, quality, extraInfo);
+    return candidates.length > 0 ? candidates[0] : null;
+  },
+
+  /**
+   * 获取歌曲播放直链的全部可用候选源（按优先级排序）。
+   * 用于播放失败时的毫秒级智能故障转移（Failover）。
+   */
+  async getSongUrlCandidates(
+    songId: string,
+    source: string,
+    quality: AudioQuality | string = 'high',
+    extraInfo?: { name?: string; singer?: string; artist?: string }
+  ): Promise<string[]> {
+    const q: AudioQuality = typeof quality === 'string' && ['standard', 'high', 'lossless', 'hires'].includes(quality)
+      ? (quality as AudioQuality)
+      : 'high';
+    const br = getQualityBr(q);
+    const enabledEndpoints = getEnabledApiEndpoints();
+    const candidateUrls: string[] = [];
+    const seenUrls = new Set<string>();
+
+    const addCandidate = (url: string | null | undefined) => {
+      if (url && typeof url === 'string' && url.trim() !== '') {
+        const clean = url.trim();
+        if (!seenUrls.has(clean)) {
+          seenUrls.add(clean);
+          candidateUrls.push(clean);
         }
       }
+    };
 
-      const data = await postRequest('url', { id: songId, source, br });
-      if (!data?.url) {
-        console.warn('API返回的数据中没有URL。返回:', JSON.stringify(data).substring(0, 100));
+    // 梯队 1：海棠 / 长青 SVIP 高速服务端（若启用）
+    if (enabledEndpoints.some(ep => ep.includes('haitangw.cc'))) {
+      try {
+        const sourceMap: Record<string, string> = { netease: 'wy', kuwo: 'kw', kugou: 'kg', tencent: 'tx', migu: 'mg' };
+        const levelMap: Record<AudioQuality, string> = { standard: 'standard', high: 'exhigh', lossless: 'lossless', hires: 'hires' };
+        const s = sourceMap[source] || source;
+        const level = levelMap[q] || 'exhigh';
+        const url = 'https://musicserver.haitangw.cc/v1/music/resolve-url';
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const resp = await universalFetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: s, rid: songId, level }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (resp.ok) {
+          const resData = await resp.json();
+          if (resData?.code === 0 && resData?.data?.url) {
+            addCandidate(resData.data.url);
+          }
+        }
+      } catch (e) {
+        console.warn('Haitang SVIP music resolve failed or timed out:', e);
       }
-      return data?.url || null;
-    } catch (err: any) {
-      console.error(`Get song URL error (ID: ${songId}, Source: ${source}):`, err);
-      return null;
     }
+
+    // 梯队 2：网易云官方高码率 direct 接口（针对网易云歌曲）
+    if (source === 'netease') {
+      try {
+        const neteaseBr = br === '1999' || br === '999' ? '999000' : '3200000';
+        const response = await universalFetch(`http://music.163.com/api/song/enhance/player/url?id=${songId}&ids=[${songId}]&br=${neteaseBr}`, {
+          headers: { 'Referer': 'http://music.163.com' }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.data?.[0]?.url) {
+            addCandidate(data.data[0].url);
+          }
+        }
+      } catch (e) {
+        console.warn('Official netease getSongUrl failed:', e);
+      }
+    }
+
+    // 梯队 3：星海音乐源 API 集群（若启用）
+    if (enabledEndpoints.some(ep => ep.includes('zddyr.top') || ep.includes('zrcdy.dpdns.org'))) {
+      try {
+        const sourceMap: Record<string, string> = { netease: 'netease', kuwo: 'kw', kugou: 'kg', tencent: 'qq', migu: 'migu' };
+        const qMap: Record<AudioQuality, string> = { standard: '128k', high: '320k', lossless: 'flac', hires: 'hires' };
+        const s = sourceMap[source] || source;
+        const xq = qMap[q] || '320k';
+        const songName = extraInfo?.name || '';
+        const singerName = extraInfo?.singer || extraInfo?.artist || '';
+
+        const domains = ['yy.zddyr.top', 'zrcdy.dpdns.org'];
+        for (const domain of domains) {
+          const xurl = `https://${domain}/lx/api/?source=${s}&name=${encodeURIComponent(songName)}&singer=${encodeURIComponent(singerName)}&songmid=${songId}&quality=${xq}`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          try {
+            const resp = await universalFetch(xurl, {
+              method: 'GET',
+              headers: { 'User-Agent': 'LX-Music-Mobile' },
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (resp.ok) {
+              const xData = await resp.json();
+              if (xData?.code === 200 && xData?.url) {
+                addCandidate(xData.url);
+                break;
+              }
+            }
+          } catch (err) {
+            clearTimeout(timeoutId);
+          }
+        }
+      } catch (e) {
+        console.warn('Xinghai API resolve failed or timed out:', e);
+      }
+    }
+
+    // 梯队 4：经典 postRequest 聚合节点（GDStudio 等）
+    if (enabledEndpoints.some(ep => !ep.includes('haitangw.cc') && !ep.includes('zddyr.top') && !ep.includes('zrcdy.dpdns.org'))) {
+      try {
+        const data = await postRequest('url', { id: songId, source, br });
+        if (data?.url) {
+          addCandidate(data.url);
+        }
+      } catch (err) {
+        console.warn('postRequest endpoints failed:', err);
+      }
+    }
+
+    return candidateUrls;
   },
 
   async getSongLyric(lyricId: string, source: string): Promise<LyricData> {

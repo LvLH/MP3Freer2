@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, Disc } from 'lucide-react';
 import {
-  API_ENDPOINTS,
+  API_ENDPOINT_INFOS,
   APP_VERSION,
   getDefaultSearchSource,
   getEnabledApiEndpoints,
@@ -126,20 +126,40 @@ export const AboutPanel: React.FC = () => {
 
           <div className="setting-row" style={{ alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: 600, fontSize: 14 }}>第三方 API 接口节点</span>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>多音源与 API 接口节点（智能故障转移）</span>
               <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                勾选可用节点，系统在请求失败时会自动顺延重试下一个节点。
+                勾选可用节点，系统在播放解析或音频流加载失败时会自动毫秒级顺延重试下一个备选音源。
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-                {API_ENDPOINTS.map(endpoint => (
-                  <label key={endpoint} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', color: 'var(--text-main)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+                {API_ENDPOINT_INFOS.map(info => (
+                  <label
+                    key={info.url}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 10,
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      color: 'var(--text-main)',
+                      padding: '8px 12px',
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255, 255, 255, 0.06)'
+                    }}
+                  >
                     <input
                       type="checkbox"
-                      checked={enabledEndpoints.includes(endpoint)}
-                      onChange={() => handleEndpointToggle(endpoint)}
-                      style={{ accentColor: '#10b981', width: 16, height: 16 }}
+                      checked={enabledEndpoints.includes(info.url)}
+                      onChange={() => handleEndpointToggle(info.url)}
+                      style={{ accentColor: '#10b981', width: 16, height: 16, marginTop: 2 }}
                     />
-                    {endpoint}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 600 }}>{info.name}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{info.url}</span>
+                      </div>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{info.desc}</span>
+                    </div>
                   </label>
                 ))}
               </div>

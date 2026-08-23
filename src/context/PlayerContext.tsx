@@ -440,7 +440,11 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ? null
       : resourceCache.getUrl(song.source, apiId, quality);
     if (!playUrl) {
-      playUrl = await MusicApiService.getSongUrl(apiId, song.source, quality);
+      playUrl = await MusicApiService.getSongUrl(apiId, song.source, quality, {
+        name: song.name,
+        singer: song.artist,
+        artist: song.artist,
+      });
       if (playUrl) resourceCache.setUrl(song.source, apiId, quality, playUrl);
     }
     if (!playUrl && options.allowExpiredFallback) {
@@ -482,7 +486,6 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     playSessionIdRef.current += 1;
     const currentSession = playSessionIdRef.current;
-    let urlRetried = false;
     let startedPlayback = false;
 
     const releasePauseSuppress = () => {
@@ -605,33 +608,48 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       };
 
+      let candidateUrls: string[] = [];
+      let candidateIndex = 0;
+
       const onError = () => {
         if (currentSession !== playSessionIdRef.current) return;
         void (async () => {
-          // 在线流失效：失效缓存并重拉一次
-          if (!song.isLocal && !urlRetried) {
-            urlRetried = true;
+          // 在线流播放或解码异常：自动触发多音源智能故障转移（Smart Failover）
+          if (!song.isLocal) {
             try {
-              const refreshed = await resolveOnlinePlayUrl(song, {
-                forceRefresh: true,
-                allowExpiredFallback: false,
-              });
-              if (currentSession !== playSessionIdRef.current) return;
-              if (refreshed) {
-                startedPlayback = false;
-                audio.src = refreshed;
-                audio.load();
-                return;
+              const apiId = resolveOnlineApiId(song);
+              const quality = getPreferredQuality();
+              if (candidateUrls.length === 0) {
+                candidateUrls = await MusicApiService.getSongUrlCandidates(apiId, song.source, quality, {
+                  name: song.name,
+                  singer: song.artist,
+                  artist: song.artist,
+                });
+              }
+
+              candidateIndex++;
+              while (candidateIndex < candidateUrls.length) {
+                const nextUrl = candidateUrls[candidateIndex];
+                if (nextUrl && nextUrl !== audio.src) {
+                  console.log(`[Failover] 自动切换至备选音源 #${candidateIndex + 1}`);
+                  resourceCache.setUrl(song.source, apiId, quality, nextUrl);
+                  startedPlayback = false;
+                  audio.removeAttribute('src');
+                  audio.src = nextUrl;
+                  audio.load();
+                  return;
+                }
+                candidateIndex++;
               }
             } catch (err) {
-              console.warn('Retry getSongUrl after audio error failed:', err);
+              console.warn('Failover audio retry failed:', err);
             }
           }
           console.error('Audio playback error:', audio.error);
           if (song.isLocal) {
             toast.error(`本地音频加载失败，即将跳过：\n${song.localPath || song.name}`);
           } else {
-            toast.error(`音频流加载失败(Error Code: ${audio.error?.code})，即将自动跳过下一首。`);
+            toast.error(`音频流加载失败(Error Code: ${audio.error?.code})，已尝试全部备选音源，即将自动跳过下一首。`);
           }
           playIntentRef.current = false;
           isPlayingRef.current = false;

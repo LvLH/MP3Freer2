@@ -30,8 +30,39 @@ export const DOWNLOAD_ON_FAVORITE_KEY = 'mp3freer_download_on_favorite';
 export const DEFAULT_DOWNLOAD_ON_FAVORITE = false;
 
 export const API_ENDPOINTS = [
+  'https://musicserver.haitangw.cc',
+  'https://yy.zddyr.top',
   'https://music-api.gdstudio.xyz',
   'https://api.xingzhige.com',
+];
+
+export interface ApiEndpointInfo {
+  url: string;
+  name: string;
+  desc: string;
+}
+
+export const API_ENDPOINT_INFOS: ApiEndpointInfo[] = [
+  {
+    url: 'https://musicserver.haitangw.cc',
+    name: '海棠 / 长青 SVIP 高速源',
+    desc: '极速响应 (200ms)，支持酷我/网易/酷狗等多平台车机高品质与无损流'
+  },
+  {
+    url: 'https://yy.zddyr.top',
+    name: '星海音乐源 API 集群',
+    desc: '多平台聚合解析源，支持酷我、咪咕、QQ、酷狗等歌曲直链'
+  },
+  {
+    url: 'https://music-api.gdstudio.xyz',
+    name: 'GDStudio 经典音源节点',
+    desc: '经典公共音乐 API 服务，覆盖全网多平台搜索与基础音频'
+  },
+  {
+    url: 'https://api.xingzhige.com',
+    name: '星之阁 API 备选节点',
+    desc: '备用第三方音乐 API 接口'
+  }
 ];
 
 export const MUSIC_SOURCES: Array<{ id: MusicSource; name: string }> = [
