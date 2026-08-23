@@ -359,18 +359,22 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const prefetchNextSong = (currentIndex: number) => {
     const pl = playlistRef.current;
     if (!pl || pl.length <= 1) return;
-    const nextIdx = playModeRef.current === 'random'
-      ? Math.floor(Math.random() * pl.length)
-      : (currentIndex + 1) % pl.length;
-    const nextSong = pl[nextIdx];
-    if (nextSong && !nextSong.isLocal) {
-      void resolveOnlinePlayUrl(nextSong).catch(() => {});
-      if (nextSong.pic_id) {
-        const cachedPic = resourceCache.getPic(nextSong.source, nextSong.pic_id);
-        if (!cachedPic) {
-          MusicApiService.getSongPic(nextSong.pic_id, nextSong.source)
-            .then(pic => { if (pic) resourceCache.setPic(nextSong.source, nextSong.pic_id!, pic); })
-            .catch(() => {});
+    // 预热接下来两首歌曲的播放直链，确保锁屏/后台切歌时直链早已在内存缓存，0ms 瞬间无缝切歌
+    const targets = playModeRef.current === 'random'
+      ? [Math.floor(Math.random() * pl.length)]
+      : [(currentIndex + 1) % pl.length, (currentIndex + 2) % pl.length];
+
+    for (const nextIdx of targets) {
+      const nextSong = pl[nextIdx];
+      if (nextSong && !nextSong.isLocal) {
+        void resolveOnlinePlayUrl(nextSong).catch(() => {});
+        if (nextSong.pic_id) {
+          const cachedPic = resourceCache.getPic(nextSong.source, nextSong.pic_id);
+          if (!cachedPic) {
+            MusicApiService.getSongPic(nextSong.pic_id, nextSong.source)
+              .then(pic => { if (pic) resourceCache.setPic(nextSong.source, nextSong.pic_id!, pic); })
+              .catch(() => {});
+          }
         }
       }
     }

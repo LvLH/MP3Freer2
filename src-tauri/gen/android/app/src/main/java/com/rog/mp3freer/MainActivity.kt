@@ -51,6 +51,30 @@ class MainActivity : TauriActivity() {
     }
   }
 
+  override fun onWebViewCreate(wv: WebView) {
+    super.onWebViewCreate(wv)
+    configureWebView(wv)
+  }
+
+  private fun configureWebView(wv: WebView) {
+    webView = wv
+    wv.setBackgroundColor(0xFF0F0A1A.toInt())
+    wv.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+    try {
+      wv.settings.mediaPlaybackRequiresUserGesture = false
+      wv.settings.domStorageEnabled = true
+      wv.settings.databaseEnabled = true
+      wv.settings.javaScriptEnabled = true
+      wv.settings.setNeedInitialFocus(false)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, false)
+      }
+      wv.addJavascriptInterface(AndroidMediaBridge(), "AndroidMediaBridge")
+    } catch (_: Throwable) {
+      // ignore
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
@@ -74,25 +98,13 @@ class MainActivity : TauriActivity() {
       registerReceiver(mediaReceiver, filter)
     }
 
-    // 开启 GPU 硬件加速；配置媒体后台流畅播放；注入原生 MediaBridge
+    // 兜底：若 onWebViewCreate 未被触发，延迟查找 DecorView
     mainHandler.postDelayed({
-      val wv = findWebView(window.decorView) ?: return@postDelayed
-      webView = wv
-      wv.setBackgroundColor(0xFF0F0A1A.toInt())
-      wv.setLayerType(View.LAYER_TYPE_HARDWARE, null)
-      try {
-        wv.settings.mediaPlaybackRequiresUserGesture = false
-        wv.settings.domStorageEnabled = true
-        wv.settings.databaseEnabled = true
-        wv.settings.setNeedInitialFocus(false)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          wv.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_BOUND, false)
-        }
-        wv.addJavascriptInterface(AndroidMediaBridge(), "AndroidMediaBridge")
-      } catch (_: Throwable) {
-        // ignore
+      val wv = findWebView(window.decorView)
+      if (wv != null && webView == null) {
+        configureWebView(wv)
       }
-    }, 100)
+    }, 200)
   }
 
   override fun onPause() {
