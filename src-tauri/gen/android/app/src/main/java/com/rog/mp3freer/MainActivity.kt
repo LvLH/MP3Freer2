@@ -34,6 +34,10 @@ class MainActivity : TauriActivity() {
   private var wakeLock: PowerManager.WakeLock? = null
   private var wifiLock: WifiManager.WifiLock? = null
   private val releaseLocksRunnable = Runnable { releaseLocksInternal() }
+  private val stopServiceRunnable = Runnable {
+    MediaPlaybackService.stop(this@MainActivity)
+    releaseLocksInternal()
+  }
   private val CHANNEL_ID = "mp3freer_playback_channel"
   private val NOTIFICATION_ID = 10086
   private val bgExecutor = Executors.newSingleThreadExecutor()
@@ -286,9 +290,13 @@ class MainActivity : TauriActivity() {
 
       val notif = notifBuilder.build()
       if (isPlaying) {
+        cancelStopService()
+        acquireLocks()
         MediaPlaybackService.start(this, notif)
       } else {
-        MediaPlaybackService.stop(this)
+        // 切歌缓冲或暂停期间：保持前台服务运行与通知栏更新，防抖延时 60 秒
+        MediaPlaybackService.update(this, notif)
+        scheduleStopService(60000L)
       }
       notificationManager?.notify(NOTIFICATION_ID, notif)
     }
@@ -348,7 +356,17 @@ class MainActivity : TauriActivity() {
     mainHandler.postDelayed(releaseLocksRunnable, delayMs)
   }
 
+  private fun scheduleStopService(delayMs: Long = 60000L) {
+    mainHandler.removeCallbacks(stopServiceRunnable)
+    mainHandler.postDelayed(stopServiceRunnable, delayMs)
+  }
+
+  private fun cancelStopService() {
+    mainHandler.removeCallbacks(stopServiceRunnable)
+  }
+
   private fun releaseLocksImmediately() {
+    cancelStopService()
     mainHandler.removeCallbacks(releaseLocksRunnable)
     releaseLocksInternal()
   }

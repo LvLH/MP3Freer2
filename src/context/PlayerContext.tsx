@@ -475,14 +475,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       onCanPlayRef.current = null;
     }
 
-    // 彻底切断旧音频源，防止切歌网络等待期间泄漏旧曲片头
+    // 切断旧音频播放，切歌期间保持 audio 实例与会话连续性
     try {
       audio.pause();
-      audio.removeAttribute('src');
-      audio.load();
     } catch (_e) {}
 
-    // 整段加载期间忽略 pause 同步：pause()/换 src/load()/WebAudio 初始化都可能触发 pause
+    // 整段加载期间忽略 pause 同步：pause()/换 src/WebAudio 初始化都可能触发 pause
     suppressPauseSyncRef.current = true;
     const wantPlay = playIntentRef.current || isPlayingRef.current;
     if (wantPlay) playIntentRef.current = true;
@@ -674,16 +672,13 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       audio.addEventListener('loadeddata', onCanPlay);
       audio.addEventListener('error', onError);
 
-      // 先摘掉旧 src 再赋值，避免同源重复赋值时浏览器不触发 canplay（歌词/播放都会停住）
-      audio.removeAttribute('src');
-      audio.src = playUrl;
-      audio.load();
+      // 直接给 audio 元素赋予新地址，保留已有的用户手势与前台播放授权
+      if (audio.src !== playUrl) {
+        audio.src = playUrl;
+      }
 
-      // 资源已在缓冲里时 canplay 可能不会再发，主动补一次
-      if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-        onCanPlay();
-      } else if (playIntentRef.current) {
-        // 息屏/锁屏休眠保障：主动发起 play() 请求让内核自动开始缓冲和播放，避免等待休眠期被抑制的 canplay 回调
+      // 无论资源是否已在缓冲区，只要有播放意图立刻发起 play() 启动流拉取与解码
+      if (playIntentRef.current) {
         startPlaybackIfNeeded();
       }
     } catch (err) {
