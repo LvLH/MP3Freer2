@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ListMusic, SkipBack, SkipForward, Play, Pause, ArrowLeftRight, Trash2 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
+import { isMobileShell } from '../utils/platform';
 import defaultCoverIcon from '../assets/default-cover.png';
 
 interface LyricViewProps {
@@ -199,13 +200,15 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
         style={{ backgroundImage: `url(${songCover})` }}
       ></div>
 
-      {/* 移动端顶部标题栏（纯居中歌名/歌手信息） */}
-      <div className="mobile-lyric-header">
-        <div className="mobile-lyric-title-info">
-          <div className="mobile-lyric-song-name">{currentSong?.name || '未知曲目'}</div>
-          <div className="mobile-lyric-song-artist">{currentSong?.artist || '未知歌手'}</div>
+      {/* 移动端顶部标题栏（纯居中歌名/歌手信息）- 仅移动端环境渲染 */}
+      {isMobileShell() && (
+        <div className="mobile-lyric-header">
+          <div className="mobile-lyric-title-info">
+            <div className="mobile-lyric-song-name">{currentSong?.name || '未知曲目'}</div>
+            <div className="mobile-lyric-song-artist">{currentSong?.artist || '未知歌手'}</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* PC 端传统关闭按钮 */}
       <button className="close-lyric-btn desktop-only-btn" onClick={onClose} title="收起歌词">
@@ -337,36 +340,40 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
 
 
 
-        {/* 移动端专属底部控制栏（纯粹控制按钮区） */}
-        <div className="mobile-lyric-bottom-bar">
-          <div className="mobile-lyric-btns">
-            <button className="mobile-lyric-ctrl-btn" onClick={prevSong} title="上一首">
-              <SkipBack size={24} />
+        {/* 移动端专属底部控制栏（纯粹控制按钮区）- 仅移动端环境渲染 */}
+        {isMobileShell() && (
+          <div className="mobile-lyric-bottom-bar">
+            <div className="mobile-lyric-btns">
+              <button className="mobile-lyric-ctrl-btn" onClick={prevSong} title="上一首">
+                <SkipBack size={24} />
+              </button>
+              <button className="mobile-lyric-play-btn" onClick={togglePlay} title={isPlaying ? '暂停' : '播放'}>
+                {isPlaying ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: 2 }} />}
+              </button>
+              <button className="mobile-lyric-ctrl-btn" onClick={nextSong} title="下一首">
+                <SkipForward size={24} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 移动端左下/右下角浮动工具按钮组（默认竖向一列排布于左下角）- 仅移动端环境渲染 */}
+        {isMobileShell() && (
+          <div className={`mobile-lyric-corner-tools align-${buttonAlign}`}>
+            <button className="mobile-lyric-tool-btn" onClick={onClose} title="收起歌词">
+              <ChevronDown size={22} />
             </button>
-            <button className="mobile-lyric-play-btn" onClick={togglePlay} title={isPlaying ? '暂停' : '播放'}>
-              {isPlaying ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: 2 }} />}
+            <button className="mobile-lyric-tool-btn" onClick={() => setIsPlaylistOpen(prev => !prev)} title="播放队列">
+              <ListMusic size={20} />
             </button>
-            <button className="mobile-lyric-ctrl-btn" onClick={nextSong} title="下一首">
-              <SkipForward size={24} />
+            <button className="mobile-lyric-tool-btn" onClick={toggleButtonAlign} title={buttonAlign === 'left' ? '切换到右侧' : '切换到左侧'}>
+              <ArrowLeftRight size={18} />
             </button>
           </div>
-        </div>
+        )}
 
-        {/* 移动端左下/右下角浮动工具按钮组（默认竖向一列排布于左下角） */}
-        <div className={`mobile-lyric-corner-tools align-${buttonAlign}`}>
-          <button className="mobile-lyric-tool-btn" onClick={onClose} title="收起歌词">
-            <ChevronDown size={22} />
-          </button>
-          <button className="mobile-lyric-tool-btn" onClick={() => setIsPlaylistOpen(prev => !prev)} title="播放队列">
-            <ListMusic size={20} />
-          </button>
-          <button className="mobile-lyric-tool-btn" onClick={toggleButtonAlign} title={buttonAlign === 'left' ? '切换到右侧' : '切换到左侧'}>
-            <ArrowLeftRight size={18} />
-          </button>
-        </div>
-
-        {/* 移动端底部抽屉播放列表 */}
-        {isPlaylistOpen && (
+        {/* 移动端底部抽屉播放列表 - 仅移动端环境渲染 */}
+        {isMobileShell() && isPlaylistOpen && (
           <div className="mobile-playlist-sheet-overlay" onClick={() => setIsPlaylistOpen(false)}>
             <div className="mobile-playlist-sheet" onClick={e => e.stopPropagation()}>
               <div className="mobile-playlist-sheet-header">

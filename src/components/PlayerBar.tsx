@@ -7,7 +7,7 @@ import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
 import { triggerGlobalSearch } from '../utils/eventBus';
 import { toggleLyricOverlay } from '../services/rustBridge';
-import { isAndroid } from '../utils/platform';
+import { isAndroid, isMobileShell } from '../utils/platform';
 
 interface PlayerBarProps {
   onToggleFullscreen: () => void;
@@ -98,29 +98,31 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen }) => {
 
   return (
     <div className="player-bar">
-      {/* 移动端顶部可拖动进度指示条（带滑轨与滑块） */}
-      <div className="mobile-player-progress-bar">
-        <div className="mobile-player-progress-track">
-          <div
-            className="mobile-player-progress-fill"
-            style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
-          />
-          <div
-            className="mobile-player-progress-thumb"
-            style={{ left: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+      {/* 移动端顶部可拖动进度指示条（带滑轨与滑块）- 仅移动端环境渲染 */}
+      {isMobileShell() && (
+        <div className="mobile-player-progress-bar">
+          <div className="mobile-player-progress-track">
+            <div
+              className="mobile-player-progress-fill"
+              style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+            />
+            <div
+              className="mobile-player-progress-thumb"
+              style={{ left: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+            />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={duration || 100}
+            step={0.1}
+            value={currentTime}
+            onChange={handleProgressChange}
+            className="mobile-player-progress-input"
+            title="拖动调整播放进度"
           />
         </div>
-        <input
-          type="range"
-          min={0}
-          max={duration || 100}
-          step={0.1}
-          value={currentTime}
-          onChange={handleProgressChange}
-          className="mobile-player-progress-input"
-          title="拖动调整播放进度"
-        />
-      </div>
+      )}
 
       {/* 左侧：歌曲信息 */}
       <div className="player-left">
