@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="is-desktop">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/mp3tao-app-icon.png" />
@@ -34,8 +34,12 @@
     <script>
       (function () {
         var ua = navigator.userAgent || '';
-        if (/Android/i.test(ua)) {
+        if (/Android/i.test(ua) && !/Windows/i.test(ua)) {
+          document.documentElement.classList.remove('is-desktop');
           document.documentElement.classList.add('is-android');
+        } else {
+          document.documentElement.classList.remove('is-android');
+          document.documentElement.classList.add('is-desktop');
         }
         window.__mp3freerBootError = function (msg) {
           var el = document.getElementById('boot-error');

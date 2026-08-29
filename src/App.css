@@ -2135,8 +2135,29 @@ body.is-car-landscape .sidebar {
 .mobile-lyric-bottom-bar,
 .mobile-lyric-corner-tools,
 .mobile-playlist-sheet-overlay,
-.my-music-mobile-container .mobile-subtabs-bar {
+.my-music-mobile-container .mobile-subtabs-bar,
+html.is-desktop .mobile-player-progress-bar,
+html.is-desktop .mobile-lyric-corner-tools,
+html.is-desktop .mobile-lyric-bottom-bar,
+html.is-desktop .mobile-lyric-header,
+html.is-desktop .mobile-nav-menu,
+html.is-desktop .mobile-playlist-sheet-overlay,
+body.is-desktop .mobile-player-progress-bar,
+body.is-desktop .mobile-lyric-corner-tools,
+body.is-desktop .mobile-lyric-bottom-bar,
+body.is-desktop .mobile-lyric-header,
+body.is-desktop .mobile-nav-menu,
+body.is-desktop .mobile-playlist-sheet-overlay,
+.is-desktop .mobile-player-progress-bar,
+.is-desktop .mobile-lyric-corner-tools,
+.is-desktop .mobile-lyric-bottom-bar,
+.is-desktop .mobile-lyric-header,
+.is-desktop .mobile-nav-menu,
+.is-desktop .mobile-playlist-sheet-overlay {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
 }
 
 /* ------------------------------------------- */
