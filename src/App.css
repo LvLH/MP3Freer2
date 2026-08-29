@@ -2126,15 +2126,17 @@ body.is-car-landscape .sidebar {
 
 /* ------------------------------------------- */
 /* ------------------------------------------- */
-/* 移动端专属组件在桌面/车机宽屏下默认隐藏       */
+/* 移动端专属组件在桌面/Windows/宽屏下默认隐藏    */
 /* ------------------------------------------- */
 .mobile-nav-menu,
 .mobile-player-progress-bg,
+.mobile-player-progress-bar,
 .mobile-lyric-header,
 .mobile-lyric-bottom-bar,
+.mobile-lyric-corner-tools,
 .mobile-playlist-sheet-overlay,
 .my-music-mobile-container .mobile-subtabs-bar {
-  display: none;
+  display: none !important;
 }
 
 /* ------------------------------------------- */
