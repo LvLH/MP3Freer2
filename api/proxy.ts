@@ -25,14 +25,20 @@ export default async function handler(req: any, res: any) {
       return res.status(200).end();
     }
 
+    // 构造请求头，保留客户端传入的 Content-Type
     const headers: Record<string, string> = {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'zh-CN,zh;q=0.9',
     };
 
+    if (req.headers['content-type']) {
+      headers['Content-Type'] = req.headers['content-type'];
+    }
+
     if (targetUrl.hostname.includes('163.com')) {
       headers['Referer'] = 'https://music.163.com/';
+      headers['Origin'] = 'https://music.163.com';
     } else {
       headers['Referer'] = `${targetUrl.origin}/`;
     }
@@ -42,8 +48,20 @@ export default async function handler(req: any, res: any) {
       headers,
     };
 
-    if (req.method === 'POST' && req.body) {
-      fetchOptions.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+      if (typeof req.body === 'string') {
+        fetchOptions.body = req.body;
+      } else if (typeof req.body === 'object') {
+        if (req.headers['content-type']?.includes('application/x-www-form-urlencoded')) {
+          const params = new URLSearchParams();
+          for (const [k, v] of Object.entries(req.body)) {
+            params.append(k, String(v));
+          }
+          fetchOptions.body = params.toString();
+        } else {
+          fetchOptions.body = JSON.stringify(req.body);
+        }
+      }
     }
 
     const response = await fetch(targetUrl.toString(), fetchOptions);
