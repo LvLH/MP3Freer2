@@ -72,41 +72,29 @@ async function postRequest(types: string, extraParams: Record<string, any>): Pro
         }
       }
 
-      let response;
-        if (endpoint.includes('gdstudio.xyz')) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000);
-          response = await window.fetch(url.toString(), {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json, text/plain, */*',
-              'Accept-Language': 'zh-CN,zh;q=0.9'
-            },
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-        } catch (e: any) {
-          if (e.name === 'AbortError' || String(e).includes('Failed to fetch') || String(e).includes('NetworkError')) {
-            throw new Error('网络连接超时或被阻止。\n\n[诊断建议]\n此API受防火墙保护，已切换为系统底层网络引擎，请确保您已开启了 [Clash 客户端](global) 或 [TUN Mode]\n*(软件内的代理设置对此API无效)*');
-          }
-          throw new Error('网络连接失败: ' + String(e));
-        }
-      } else {
-        const fetchOptions: any = {
-          method: 'GET',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': `${endpoint}/`,
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'zh-CN,zh;q=0.9'
-          },
-        };
+      const fetchOptions: any = {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': `${endpoint}/`,
+          'Accept': 'application/json, text/plain, */*',
+          'Accept-Language': 'zh-CN,zh;q=0.9'
+        },
+      };
 
-        if (proxyUrl) {
-          fetchOptions.proxy = { all: proxyUrl };
-        }
+      if (proxyUrl) {
+        fetchOptions.proxy = { all: proxyUrl };
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      fetchOptions.signal = controller.signal;
+
+      let response;
+      try {
         response = await universalFetch(url.toString(), fetchOptions);
+      } finally {
+        clearTimeout(timeoutId);
       }
 
       if (!response.ok) {
