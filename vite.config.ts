@@ -21,20 +21,25 @@ export default defineConfig(async () => ({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       },
       manifest: {
-        name: 'MP3Freer2',
-        short_name: 'MP3Freer2',
-        description: 'MP3 Player & Music Client',
-        theme_color: '#1a1824',
+        name: 'MP3韬',
+        short_name: 'MP3韬',
+        description: 'MP3韬 - 自由听你想听的音乐',
+        theme_color: '#0f0a1a',
+        background_color: '#0f0a1a',
+        display: 'standalone',
+        orientation: 'any',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: '/mp3tao-app-icon.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           },
           {
-            src: 'pwa-512x512.png',
+            src: '/mp3tao-app-icon.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }
