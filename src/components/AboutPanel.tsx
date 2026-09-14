@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { AlertCircle, Disc } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { AlertCircle, Disc, Cloud, Download, Upload, RefreshCw } from 'lucide-react';
 import {
   API_ENDPOINT_INFOS,
   APP_VERSION,
@@ -16,12 +16,16 @@ import {
 } from '../settings';
 import { usePlayer } from '../context/PlayerContext';
 import { resourceCache } from '../services/cache';
+import { getDeviceId } from '../services/syncService';
 
 export const AboutPanel: React.FC = () => {
-  const { reloadCurrentSong } = usePlayer();
+  const { reloadCurrentSong, exportFavorites, importFavorites, syncFavoritesNow } = usePlayer();
   const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const [enabledEndpoints, setEnabledEndpointsState] = useState<string[]>([]);
   const [preferredQuality, setPreferredQualityState] = useState<AudioQuality>('high');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const deviceId = getDeviceId();
 
   useEffect(() => {
     const savedSource = getDefaultSearchSource();
@@ -162,6 +166,67 @@ export const AboutPanel: React.FC = () => {
                     </div>
                   </label>
                 ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="setting-row" style={{ alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Cloud size={16} style={{ color: '#a855f7' }} />
+                <span style={{ fontWeight: 600, fontSize: 14 }}>设备云同步与数据迁移</span>
+              </div>
+              <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
+                当前设备标识：<code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: 4, color: '#c084fc' }}>{deviceId}</code>
+                <br />
+                支持卸载重装基于设备特征自动找回收藏，亦支持导出 JSON 备份文件用于换机迁移。
+              </p>
+              <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      void importFavorites(file);
+                      e.target.value = '';
+                    }
+                  }}
+                  accept=".json"
+                  style={{ display: 'none' }}
+                />
+                <button
+                  className="primary-btn"
+                  onClick={async () => {
+                    setIsSyncing(true);
+                    try {
+                      await syncFavoritesNow();
+                    } finally {
+                      setIsSyncing(false);
+                    }
+                  }}
+                  disabled={isSyncing}
+                  style={{ height: 32, padding: '0 12px', fontSize: 12, borderRadius: 6, gap: 4 }}
+                >
+                  <RefreshCw size={13} className={isSyncing ? 'spin' : ''} />
+                  <span>{isSyncing ? '同步中' : '立即双向同步'}</span>
+                </button>
+                <button
+                  className="primary-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ height: 32, padding: '0 12px', fontSize: 12, borderRadius: 6, gap: 4, background: 'rgba(255,255,255,0.08)' }}
+                >
+                  <Upload size={13} />
+                  <span>从文件导入</span>
+                </button>
+                <button
+                  className="primary-btn"
+                  onClick={exportFavorites}
+                  style={{ height: 32, padding: '0 12px', fontSize: 12, borderRadius: 6, gap: 4, background: 'rgba(255,255,255,0.08)' }}
+                >
+                  <Download size={13} />
+                  <span>导出备份文件</span>
+                </button>
               </div>
             </div>
           </div>

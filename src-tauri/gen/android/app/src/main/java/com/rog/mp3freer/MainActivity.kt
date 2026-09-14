@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -417,6 +418,15 @@ class MainActivity : TauriActivity() {
         releaseLocksImmediately()
         notificationManager?.cancel(NOTIFICATION_ID)
         mediaSession?.isActive = false
+      }
+    }
+
+    @JavascriptInterface
+    fun getDeviceId(): String {
+      return try {
+        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+      } catch (_: Throwable) {
+        ""
       }
     }
   }

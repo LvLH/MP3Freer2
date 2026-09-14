@@ -1,11 +1,42 @@
 import React, { useState, useRef } from 'react';
-import { Heart, Play, Plus, Music, ArrowUp } from 'lucide-react';
+import { Heart, Play, Plus, Music, ArrowUp, Download, Upload, RefreshCw, Cloud } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { CoverImage } from './CoverImage';
+import { getDeviceId } from '../services/syncService';
 
 export const FavoritePanel: React.FC = () => {
-  const { favoriteSongs, favoritePlaylists, favoriteArtists, playSong, addToPlaylist } = usePlayer();
+  const {
+    favoriteSongs,
+    favoritePlaylists,
+    favoriteArtists,
+    playSong,
+    addToPlaylist,
+    exportFavorites,
+    importFavorites,
+    syncFavoritesNow,
+  } = usePlayer();
   const [activeTab, setActiveTab] = useState<'songs' | 'artists' | 'playlists'>('songs');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const deviceId = getDeviceId();
+  const shortDeviceId = deviceId.length > 12 ? `${deviceId.slice(0, 8)}...` : deviceId;
+
+  const handleSyncClick = async () => {
+    setIsSyncing(true);
+    try {
+      await syncFavoritesNow();
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      void importFavorites(file);
+      e.target.value = '';
+    }
+  };
 
   const formatSecs = (secs: number) => {
     if (!secs) return '00:00';
@@ -28,17 +59,106 @@ export const FavoritePanel: React.FC = () => {
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImportFile}
+        accept=".json"
+        style={{ display: 'none' }}
+      />
       <div className="glass-card" style={{ flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
-            <ArrowUp size={18} />
-          </button>
-          <Heart size={24} fill="#ef4444" stroke="#ef4444" />
-          <div>
-            <h2>我的收藏</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
-              收藏的歌曲和歌单将保存在本地，随时回味。
-            </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
+              <ArrowUp size={18} />
+            </button>
+            <Heart size={24} fill="#ef4444" stroke="#ef4444" />
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h2 style={{ margin: 0 }}>我的收藏</h2>
+                <span
+                  title={`设备识别码: ${deviceId}（重装自动识别恢复）`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: 'rgba(168, 85, 247, 0.15)',
+                    color: '#c084fc',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                  }}
+                >
+                  <Cloud size={12} />
+                  <span>设备同步 {shortDeviceId}</span>
+                </span>
+              </div>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
+                收藏的歌曲将自动基于设备特征同步备份，重装亦可自动找回。
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={handleSyncClick}
+              disabled={isSyncing}
+              title="立即与云端双向同步收藏"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: 12,
+                background: 'rgba(255, 255, 255, 0.06)',
+                color: 'var(--text-main)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                cursor: isSyncing ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <RefreshCw size={13} className={isSyncing ? 'spin' : ''} />
+              <span>{isSyncing ? '同步中' : '云端同步'}</span>
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="从备份的 JSON 文件导入收藏"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: 12,
+                background: 'rgba(255, 255, 255, 0.06)',
+                color: 'var(--text-main)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                cursor: 'pointer',
+              }}
+            >
+              <Upload size={13} />
+              <span>导入备份</span>
+            </button>
+            <button
+              onClick={exportFavorites}
+              title="将当前收藏导出为 JSON 备份文件"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: 12,
+                background: 'rgba(255, 255, 255, 0.06)',
+                color: 'var(--text-main)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                cursor: 'pointer',
+              }}
+            >
+              <Download size={13} />
+              <span>导出备份</span>
+            </button>
           </div>
         </div>
 

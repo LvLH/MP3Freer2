@@ -35,6 +35,12 @@ import {
   normalizePersistedHistory,
   stripEphemeralStreamUrl,
 } from '../utils/songUtils';
+import {
+  backupFavoritesToCloud,
+  restoreFavoritesFromCloud,
+  exportFavoritesToFile,
+  importFavoritesFromFile,
+} from '../services/syncService';
 import type {
   Song,
   LyricLine,
@@ -105,6 +111,12 @@ interface PlayerContextType {
   toggleShowTranslation: () => void;
   /** WebAudio 频谱分析节点 */
   analyser: AnalyserNode | null;
+  /** 手动触发一次云端同步 */
+  syncFavoritesNow: () => Promise<void>;
+  /** 导出收藏备份文件 */
+  exportFavorites: () => void;
+  /** 从 JSON 文件导入收藏 */
+  importFavorites: (file: File) => Promise<void>;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
@@ -269,11 +281,31 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const savedFavorites = storage.getString(StorageKeys.FAVORITE_SONGS);
-    if (savedFavorites) {
+    const parsedFavs = savedFavorites ? storage.getJSON<Song[]>(StorageKeys.FAVORITE_SONGS, []) : [];
+    if (parsedFavs.length > 0) {
       // 收藏可能含已下载本地曲（保留 localPath/url）与在线条目（规范化 id、剥离流 url）
-      setFavoriteSongs(storage.getJSON<Song[]>(StorageKeys.FAVORITE_SONGS, []).map(s =>
-        s.isLocal ? s : normalizePersistedSong(s)
-      ));
+      setFavoriteSongs(parsedFavs.map(s => (s.isLocal ? s : normalizePersistedSong(s))));
+    } else {
+      // 本地收藏为空（如重装或新安装打开），根据设备 ID 自动静默从云端拉取历史备份
+      void restoreFavoritesFromCloud().then(cloudFav => {
+        if (cloudFav && cloudFav.songs && cloudFav.songs.length > 0) {
+          const restoredSongs = cloudFav.songs.map(normalizePersistedSong);
+          setFavoriteSongs(restoredSongs);
+          storage.setJSON(
+            StorageKeys.FAVORITE_SONGS,
+            restoredSongs.map(s => (s.isLocal ? s : stripEphemeralStreamUrl(s))),
+          );
+          if (cloudFav.playlists && cloudFav.playlists.length > 0) {
+            setFavoritePlaylists(cloudFav.playlists);
+            storage.setJSON(StorageKeys.FAVORITE_PLAYLISTS, cloudFav.playlists);
+          }
+          if (cloudFav.artists && cloudFav.artists.length > 0) {
+            setFavoriteArtists(cloudFav.artists);
+            storage.setJSON(StorageKeys.FAVORITE_ARTISTS, cloudFav.artists);
+          }
+          toast.success(`已根据设备 ID 自动找回 ${cloudFav.songs.length} 首云端收藏歌曲`);
+        }
+      });
     }
 
     return () => {
@@ -1352,6 +1384,128 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  // 收藏变动时自动防抖静默同步到云端（基于设备 ID）
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (favoriteSongs.length === 0 && favoritePlaylists.length === 0 && favoriteArtists.length === 0) {
+      return;
+    }
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      void backupFavoritesToCloud({
+        songs: favoriteSongs,
+        playlists: favoritePlaylists,
+        artists: favoriteArtists,
+      });
+      syncTimerRef.current = null;
+    }, 2500);
+  }, [favoriteSongs, favoritePlaylists, favoriteArtists]);
+
+  // 手动触发一次云端同步
+  const syncFavoritesNow = async () => {
+    try {
+      const backupOk = await backupFavoritesToCloud({
+        songs: favoriteSongs,
+        playlists: favoritePlaylists,
+        artists: favoriteArtists,
+      });
+      const cloudData = await restoreFavoritesFromCloud();
+      if (cloudData && cloudData.songs && cloudData.songs.length > 0) {
+        // 合并云端与本地歌曲
+        const localMap = new Map(favoriteSongs.map(s => [s.id, s]));
+        cloudData.songs.forEach(s => {
+          if (!localMap.has(s.id)) {
+            localMap.set(s.id, normalizePersistedSong(s));
+          }
+        });
+        const merged = Array.from(localMap.values());
+        setFavoriteSongs(merged);
+        storage.setJSON(
+          StorageKeys.FAVORITE_SONGS,
+          merged.map(s => (s.isLocal ? s : stripEphemeralStreamUrl(s))),
+        );
+        toast.success(`云端同步成功！已同步 ${merged.length} 首收藏歌曲`);
+      } else if (backupOk) {
+        toast.success(`已将当前 ${favoriteSongs.length} 首收藏成功备份至云端`);
+      } else {
+        toast.success('已连接云端同步服务');
+      }
+    } catch (err: any) {
+      console.error('Manual sync failed:', err);
+      toast.error(`同步失败: ${err?.message || '网络异常'}`);
+    }
+  };
+
+  // 导出收藏备份文件
+  const exportFavorites = () => {
+    try {
+      const filename = exportFavoritesToFile({
+        songs: favoriteSongs,
+        playlists: favoritePlaylists,
+        artists: favoriteArtists,
+      });
+      toast.success(`收藏已成功导出为文件：\n${filename}`);
+    } catch (err: any) {
+      toast.error(`导出失败: ${err?.message || '未知错误'}`);
+    }
+  };
+
+  // 从文件导入收藏备份
+  const importFavorites = async (file: File) => {
+    try {
+      const data = await importFavoritesFromFile(file);
+      if (!data.songs || data.songs.length === 0) {
+        toast.error('导入的文件中未发现有效的歌曲数据');
+        return;
+      }
+
+      // 合并入当前收藏列表
+      const localMap = new Map(favoriteSongs.map(s => [s.id, s]));
+      let addedCount = 0;
+      data.songs.forEach(s => {
+        if (!localMap.has(s.id)) {
+          localMap.set(s.id, normalizePersistedSong(s));
+          addedCount++;
+        }
+      });
+      const merged = Array.from(localMap.values());
+      setFavoriteSongs(merged);
+      storage.setJSON(
+        StorageKeys.FAVORITE_SONGS,
+        merged.map(s => (s.isLocal ? s : stripEphemeralStreamUrl(s))),
+      );
+
+      // 合并歌单与歌手
+      if (data.playlists && data.playlists.length > 0) {
+        const plMap = new Map(favoritePlaylists.map(p => [p.id, p]));
+        data.playlists.forEach(p => plMap.set(p.id, p));
+        const mergedPl = Array.from(plMap.values());
+        setFavoritePlaylists(mergedPl);
+        storage.setJSON(StorageKeys.FAVORITE_PLAYLISTS, mergedPl);
+      }
+
+      if (data.artists && data.artists.length > 0) {
+        const arMap = new Map(favoriteArtists.map(a => [a.id, a]));
+        data.artists.forEach(a => arMap.set(a.id, a));
+        const mergedAr = Array.from(arMap.values());
+        setFavoriteArtists(mergedAr);
+        storage.setJSON(StorageKeys.FAVORITE_ARTISTS, mergedAr);
+      }
+
+      // 立即触发一次云端备份
+      void backupFavoritesToCloud({
+        songs: merged,
+        playlists: favoritePlaylists,
+        artists: favoriteArtists,
+      });
+
+      toast.success(`成功导入收藏！新增 ${addedCount} 首歌曲，当前共 ${merged.length} 首`);
+    } catch (err: any) {
+      console.error('Import failed:', err);
+      toast.error(`导入失败: ${err?.message || '文件格式不正确'}`);
+    }
+  };
+
   return (
     <PlayerContext.Provider value={{
       currentSong,
@@ -1399,6 +1553,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       showTranslation,
       toggleShowTranslation,
       analyser,
+      syncFavoritesNow,
+      exportFavorites,
+      importFavorites,
     }}>
       {/* 不设 crossOrigin：在线 CDN 常无 CORS，会导致 Android/WebView 无声或无法解码。
           不用 display:none：Android WebView 会把不可见媒体元素节流，导致 ended 事件丢失、
