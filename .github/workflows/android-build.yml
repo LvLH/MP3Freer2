@@ -43,6 +43,9 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi
 
+      - name: Clean domestic cargo mirrors for CI
+        run: rm -rf src-tauri/.cargo
+
       - name: Install npm dependencies
         run: npm ci
 
@@ -78,6 +81,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+
+      - name: Clean domestic cargo mirrors for CI
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue src-tauri/.cargo
 
       - name: Install npm dependencies
         run: npm ci
