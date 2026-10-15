@@ -3,7 +3,7 @@ import { Heart, Play, Plus, Music, ArrowUp, Download, Upload, RefreshCw, Key, Ed
 import { usePlayer } from '../context/PlayerContext';
 import { CoverImage } from './CoverImage';
 import { MUSIC_SOURCES } from '../settings';
-import { DEFAULT_SYNC_CODE } from '../services/syncService';
+import { DEFAULT_SYNC_CODE, generateRandomSyncCode } from '../services/syncService';
 
 export const FavoritePanel: React.FC = () => {
   const {
@@ -399,15 +399,15 @@ export const FavoritePanel: React.FC = () => {
             </div>
 
             <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5, margin: '0 0 16px 0' }}>
-              不同设备（安卓手机、车机、电脑）只需输入<strong>完全一致的暗号</strong>，即可实现收藏无缝双向互通。默认暗号为 <code>{DEFAULT_SYNC_CODE}</code>。
+              暗号规则：<code>SKY-字母+三位数字</code>（如 <code>SKY-A128</code>）。多台设备（手机、车机、电脑）只需输入<strong>完全相同的暗号</strong>即可双向互通，不同用户使用独立暗号避免串台。
             </p>
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
               <input
                 type="text"
                 value={tempCode}
                 onChange={e => setTempCode(e.target.value)}
-                placeholder="例如: SKY-0608"
+                placeholder="例如: SKY-A128 或 SKY-0608"
                 style={{
                   flex: 1,
                   background: 'rgba(0,0,0,0.3)',
@@ -425,7 +425,25 @@ export const FavoritePanel: React.FC = () => {
               />
               <button
                 type="button"
+                onClick={() => setTempCode(generateRandomSyncCode())}
+                title="按规则随机生成新暗号"
+                style={{
+                  padding: '0 10px',
+                  fontSize: 12,
+                  background: 'rgba(168, 85, 247, 0.15)',
+                  color: '#c084fc',
+                  border: '1px solid rgba(168, 85, 247, 0.3)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                随机换一个
+              </button>
+              <button
+                type="button"
                 onClick={() => setTempCode(DEFAULT_SYNC_CODE)}
+                title="填入常用预设暗号 SKY-0608"
                 style={{
                   padding: '0 10px',
                   fontSize: 12,
@@ -437,7 +455,7 @@ export const FavoritePanel: React.FC = () => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                恢复默认
+                填 SKY-0608
               </button>
             </div>
 

@@ -16,7 +16,7 @@ import {
 } from '../settings';
 import { usePlayer } from '../context/PlayerContext';
 import { resourceCache } from '../services/cache';
-import { getSyncServerUrl, setSyncServerUrl, DEFAULT_SYNC_CODE } from '../services/syncService';
+import { getSyncServerUrl, setSyncServerUrl, DEFAULT_SYNC_CODE, generateRandomSyncCode } from '../services/syncService';
 
 export const AboutPanel: React.FC = () => {
   const {
@@ -262,6 +262,26 @@ export const AboutPanel: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      const newCode = generateRandomSyncCode();
+                      setInputCode(newCode);
+                      updateSyncCode(newCode);
+                    }}
+                    style={{
+                      height: 30,
+                      padding: '0 8px',
+                      fontSize: 11,
+                      background: 'rgba(168, 85, 247, 0.15)',
+                      border: '1px solid rgba(168, 85, 247, 0.3)',
+                      borderRadius: 6,
+                      color: '#c084fc',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    随机换一个
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
                       setInputCode(DEFAULT_SYNC_CODE);
                       updateSyncCode(DEFAULT_SYNC_CODE);
                     }}
@@ -276,7 +296,7 @@ export const AboutPanel: React.FC = () => {
                       cursor: 'pointer',
                     }}
                   >
-                    恢复默认 ({DEFAULT_SYNC_CODE})
+                    填 SKY-0608
                   </button>
                 </div>
 

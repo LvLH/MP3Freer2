@@ -15,6 +15,17 @@ export interface FavoritesBackupData {
   };
 }
 
+/**
+ * 按照规则生成随机暗号：SKY-开头 + 1个随机大写字母 + 1个随机三位数
+ * 例如: SKY-A128, SKY-K892, SKY-Z007
+ */
+export function generateRandomSyncCode(): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const randomLetter = letters[Math.floor(Math.random() * letters.length)];
+  const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  return `SKY-${randomLetter}${randomNum}`;
+}
+
 export const DEFAULT_SYNC_CODE = 'SKY-0608';
 const DEVICE_ID_KEY = 'mp3tao_device_id';
 const LAST_SYNC_TIME_KEY = 'mp3tao_last_sync_time';
@@ -28,19 +39,21 @@ async function universalFetch(url: string, options?: any) {
   return await fetch(url, options);
 }
 
-/** 获取当前同步暗号（默认 SKY-0608） */
+/** 获取当前同步暗号（若本地未设置，则自动按规则生成并持久化一个独立随机暗号） */
 export function getSyncCode(): string {
   if (typeof window === 'undefined') return DEFAULT_SYNC_CODE;
   const saved = storage.getString(StorageKeys.SYNC_CODE);
   if (saved && saved.trim().length > 0) {
     return saved.trim();
   }
-  return DEFAULT_SYNC_CODE;
+  const newCode = generateRandomSyncCode();
+  storage.setString(StorageKeys.SYNC_CODE, newCode);
+  return newCode;
 }
 
 /** 设置同步暗号 */
 export function setSyncCode(code: string): void {
-  const clean = (code || '').trim() || DEFAULT_SYNC_CODE;
+  const clean = (code || '').trim() || generateRandomSyncCode();
   storage.setString(StorageKeys.SYNC_CODE, clean);
 }
 
