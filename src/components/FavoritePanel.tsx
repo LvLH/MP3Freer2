@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { Heart, Play, Plus, Music, ArrowUp, Download, Upload, RefreshCw, Cloud } from 'lucide-react';
+import { Heart, Play, Plus, Music, ArrowUp, Download, Upload, RefreshCw, Key, Edit3, X, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { CoverImage } from './CoverImage';
-import { getDeviceId } from '../services/syncService';
 import { MUSIC_SOURCES } from '../settings';
+import { DEFAULT_SYNC_CODE } from '../services/syncService';
 
 export const FavoritePanel: React.FC = () => {
   const {
@@ -15,12 +15,16 @@ export const FavoritePanel: React.FC = () => {
     exportFavorites,
     importFavorites,
     syncFavoritesNow,
+    uploadFavoritesNow,
+    restoreFavoritesNow,
+    syncCode,
+    updateSyncCode,
   } = usePlayer();
   const [activeTab, setActiveTab] = useState<'songs' | 'artists' | 'playlists'>('songs');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [showCodeModal, setShowCodeModal] = useState(false);
+  const [tempCode, setTempCode] = useState(syncCode);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const deviceId = getDeviceId();
-  const shortDeviceId = deviceId.length > 12 ? `${deviceId.slice(0, 8)}...` : deviceId;
 
   const handleSyncClick = async () => {
     setIsSyncing(true);
@@ -37,6 +41,13 @@ export const FavoritePanel: React.FC = () => {
       void importFavorites(file);
       e.target.value = '';
     }
+  };
+
+  const handleSaveSyncCode = () => {
+    const trimmed = tempCode.trim();
+    if (!trimmed) return;
+    updateSyncCode(trimmed);
+    setShowCodeModal(false);
   };
 
   const formatSecs = (secs: number) => {
@@ -75,52 +86,61 @@ export const FavoritePanel: React.FC = () => {
             </button>
             <Heart size={24} fill="#ef4444" stroke="#ef4444" />
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <h2 style={{ margin: 0 }}>我的收藏</h2>
-                <span
-                  title={`设备识别码: ${deviceId}（重装自动识别恢复）`}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempCode(syncCode);
+                    setShowCodeModal(true);
+                  }}
+                  title="点击修改同步暗号，多端输入相同暗号即可互通"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 4,
-                    fontSize: 11,
-                    padding: '2px 8px',
-                    borderRadius: 12,
-                    background: 'rgba(168, 85, 247, 0.15)',
+                    gap: 6,
+                    fontSize: 12,
+                    padding: '3px 10px',
+                    borderRadius: 14,
+                    background: 'rgba(168, 85, 247, 0.18)',
                     color: '#c084fc',
-                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    border: '1px solid rgba(168, 85, 247, 0.4)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
                   }}
                 >
-                  <Cloud size={12} />
-                  <span>设备同步 {shortDeviceId}</span>
-                </span>
+                  <Key size={13} />
+                  <span>暗号: <strong>{syncCode}</strong></span>
+                  <Edit3 size={11} style={{ opacity: 0.7 }} />
+                </button>
               </div>
               <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
-                收藏的歌曲将自动基于设备特征同步备份，重装亦可自动找回。
+                安卓手机、车机与电脑端输入相同暗号即可实时双向互通；新增收藏自动云端静默同步。
               </p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <button
               onClick={handleSyncClick}
               disabled={isSyncing}
-              title="立即与云端双向同步收藏"
+              title="立即与云端双向智能合并"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
-                padding: '6px 12px',
+                padding: '7px 14px',
                 borderRadius: 8,
                 fontSize: 12,
-                background: 'rgba(255, 255, 255, 0.06)',
-                color: 'var(--text-main)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
+                fontWeight: 600,
+                background: 'rgba(168, 85, 247, 0.2)',
+                color: '#d8b4fe',
+                border: '1px solid rgba(168, 85, 247, 0.4)',
                 cursor: isSyncing ? 'not-allowed' : 'pointer',
               }}
             >
               <RefreshCw size={13} className={isSyncing ? 'spin' : ''} />
-              <span>{isSyncing ? '同步中' : '云端同步'}</span>
+              <span>{isSyncing ? '同步中...' : '立即双向同步'}</span>
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -335,6 +355,183 @@ export const FavoritePanel: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* 修改同步暗号模态弹窗 */}
+      {showCodeModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setShowCodeModal(false)}
+        >
+          <div
+            style={{
+              background: '#1e1e24',
+              border: '1px solid rgba(255, 255, 255, 0.15)',
+              borderRadius: 14,
+              padding: 24,
+              maxWidth: 420,
+              width: '100%',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Key size={18} style={{ color: '#c084fc' }} />
+                <h3 style={{ margin: 0, fontSize: 16 }}>设置云端同步暗号</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCodeModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.5, margin: '0 0 16px 0' }}>
+              不同设备（安卓手机、车机、电脑）只需输入<strong>完全一致的暗号</strong>，即可实现收藏无缝双向互通。默认暗号为 <code>{DEFAULT_SYNC_CODE}</code>。
+            </p>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <input
+                type="text"
+                value={tempCode}
+                onChange={e => setTempCode(e.target.value)}
+                placeholder="例如: SKY-0608"
+                style={{
+                  flex: 1,
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 8,
+                  padding: '8px 12px',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  outline: 'none',
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSaveSyncCode();
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setTempCode(DEFAULT_SYNC_CODE)}
+                style={{
+                  padding: '0 10px',
+                  fontSize: 12,
+                  background: 'rgba(255,255,255,0.08)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                恢复默认
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button
+                type="button"
+                onClick={() => setShowCodeModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '9px 0',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  background: 'rgba(255,255,255,0.06)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  cursor: 'pointer',
+                }}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSyncCode}
+                style={{
+                  flex: 1,
+                  padding: '9px 0',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  background: '#9333ea',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                保存暗号
+              </button>
+            </div>
+
+            <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowCodeModal(false);
+                  await uploadFavoritesNow();
+                }}
+                title="用本地当前收藏直接覆盖云端该暗号对应的数据"
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  padding: '6px 8px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  cursor: 'pointer',
+                }}
+              >
+                <ArrowUpCircle size={12} />
+                <span>仅备份到云端</span>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setShowCodeModal(false);
+                  await restoreFavoritesNow();
+                }}
+                title="直接拉取云端该暗号数据覆盖/恢复本地收藏"
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 4,
+                  padding: '6px 8px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  cursor: 'pointer',
+                }}
+              >
+                <ArrowDownCircle size={12} />
+                <span>从云端强制恢复</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

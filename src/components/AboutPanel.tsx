@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { AlertCircle, Disc, Cloud, Download, Upload, RefreshCw, Sparkles } from 'lucide-react';
+import { AlertCircle, Disc, Cloud, Download, Upload, RefreshCw, Sparkles, Key, Server, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import {
   API_ENDPOINT_INFOS,
   APP_VERSION,
@@ -16,16 +16,30 @@ import {
 } from '../settings';
 import { usePlayer } from '../context/PlayerContext';
 import { resourceCache } from '../services/cache';
-import { getDeviceId } from '../services/syncService';
+import { getSyncServerUrl, setSyncServerUrl, DEFAULT_SYNC_CODE } from '../services/syncService';
 
 export const AboutPanel: React.FC = () => {
-  const { reloadCurrentSong, exportFavorites, importFavorites, syncFavoritesNow } = usePlayer();
+  const {
+    reloadCurrentSong,
+    exportFavorites,
+    importFavorites,
+    syncFavoritesNow,
+    uploadFavoritesNow,
+    restoreFavoritesNow,
+    syncCode,
+    updateSyncCode,
+  } = usePlayer();
   const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const [enabledEndpoints, setEnabledEndpointsState] = useState<string[]>([]);
   const [preferredQuality, setPreferredQualityState] = useState<AudioQuality>('high');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [inputCode, setInputCode] = useState(syncCode);
+  const [serverUrl, setServerUrlState] = useState(() => getSyncServerUrl());
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const deviceId = getDeviceId();
+
+  useEffect(() => {
+    setInputCode(syncCode);
+  }, [syncCode]);
 
   useEffect(() => {
     const savedSource = getDefaultSearchSource();
@@ -208,14 +222,98 @@ export const AboutPanel: React.FC = () => {
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Cloud size={16} style={{ color: '#a855f7' }} />
-                <span style={{ fontWeight: 600, fontSize: 14 }}>设备云同步与数据迁移</span>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>跨设备云端同步与数据迁移</span>
               </div>
               <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                当前设备标识：<code style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: 4, color: '#c084fc' }}>{deviceId}</code>
-                <br />
-                支持卸载重装基于设备特征自动找回收藏，亦支持导出 JSON 备份文件用于换机迁移。
+                不同设备（安卓手机、车载大屏、Windows 电脑）输入<strong>相同同步暗号</strong>即可双向互通；收藏歌曲时亦会自动静默备份。
               </p>
-              <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+
+              {/* 同步暗号配置项 */}
+              <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, minWidth: 70, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Key size={13} style={{ color: '#c084fc' }} /> 同步暗号:
+                  </span>
+                  <input
+                    type="text"
+                    value={inputCode}
+                    onChange={e => setInputCode(e.target.value)}
+                    placeholder="输入暗号，如 SKY-0608"
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      width: 160,
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={() => updateSyncCode(inputCode)}
+                    style={{ height: 30, padding: '0 10px', fontSize: 12, borderRadius: 6 }}
+                  >
+                    保存暗号
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInputCode(DEFAULT_SYNC_CODE);
+                      updateSyncCode(DEFAULT_SYNC_CODE);
+                    }}
+                    style={{
+                      height: 30,
+                      padding: '0 8px',
+                      fontSize: 11,
+                      background: 'transparent',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 6,
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    恢复默认 ({DEFAULT_SYNC_CODE})
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, minWidth: 70, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Server size={13} style={{ color: '#38bdf8' }} /> 自建节点:
+                  </span>
+                  <input
+                    type="text"
+                    value={serverUrl}
+                    onChange={e => setServerUrlState(e.target.value)}
+                    onBlur={() => setSyncServerUrl(serverUrl)}
+                    placeholder="选填，留空即默认使用高可用内置公网通道"
+                    style={{
+                      flex: 1,
+                      maxWidth: 280,
+                      padding: '6px 10px',
+                      borderRadius: 6,
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#fff',
+                      fontSize: 12,
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    onClick={() => setSyncServerUrl(serverUrl)}
+                    style={{ height: 30, padding: '0 10px', fontSize: 12, borderRadius: 6, background: 'rgba(255,255,255,0.08)' }}
+                  >
+                    保存节点
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -244,6 +342,28 @@ export const AboutPanel: React.FC = () => {
                 >
                   <RefreshCw size={13} className={isSyncing ? 'spin' : ''} />
                   <span>{isSyncing ? '同步中' : '立即双向同步'}</span>
+                </button>
+                <button
+                  className="primary-btn"
+                  onClick={async () => {
+                    await uploadFavoritesNow();
+                  }}
+                  style={{ height: 32, padding: '0 12px', fontSize: 12, borderRadius: 6, gap: 4, background: 'rgba(255,255,255,0.08)' }}
+                  title="仅上传当前本地收藏覆盖云端"
+                >
+                  <ArrowUpCircle size={13} />
+                  <span>仅备份到云端</span>
+                </button>
+                <button
+                  className="primary-btn"
+                  onClick={async () => {
+                    await restoreFavoritesNow();
+                  }}
+                  style={{ height: 32, padding: '0 12px', fontSize: 12, borderRadius: 6, gap: 4, background: 'rgba(255,255,255,0.08)' }}
+                  title="仅从云端拉取覆盖本地收藏"
+                >
+                  <ArrowDownCircle size={13} />
+                  <span>从云端强制恢复</span>
                 </button>
                 <button
                   className="primary-btn"

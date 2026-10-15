@@ -61,4 +61,6 @@ export const StorageKeys = {
   SHOW_TRANSLATION: 'mp3freer_show_translation',
   LOCAL_DIRECTORY: 'local_directory_key',
   VOLUME: 'mp3freer_volume',
+  SYNC_CODE: 'mp3freer_sync_code',
+  SYNC_SERVER_URL: 'mp3freer_sync_server_url',
 } as const;

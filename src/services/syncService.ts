@@ -1,8 +1,11 @@
-import { Song, FavoritePlaylist, FavoriteArtist } from '../context/PlayerContext';
+import { Song, FavoritePlaylist, FavoriteArtist } from '../types/music';
+import { storage, StorageKeys } from './storage';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
 
 export interface FavoritesBackupData {
   version: string;
   app: string;
+  syncCode: string;
   deviceId: string;
   exportedAt: number;
   favorites: {
@@ -12,13 +15,48 @@ export interface FavoritesBackupData {
   };
 }
 
+export const DEFAULT_SYNC_CODE = 'SKY-0608';
 const DEVICE_ID_KEY = 'mp3tao_device_id';
 const LAST_SYNC_TIME_KEY = 'mp3tao_last_sync_time';
 
+const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
+
+async function universalFetch(url: string, options?: any) {
+  if (isTauri) {
+    return await tauriFetch(url, options);
+  }
+  return await fetch(url, options);
+}
+
+/** 获取当前同步暗号（默认 SKY-0608） */
+export function getSyncCode(): string {
+  if (typeof window === 'undefined') return DEFAULT_SYNC_CODE;
+  const saved = storage.getString(StorageKeys.SYNC_CODE);
+  if (saved && saved.trim().length > 0) {
+    return saved.trim();
+  }
+  return DEFAULT_SYNC_CODE;
+}
+
+/** 设置同步暗号 */
+export function setSyncCode(code: string): void {
+  const clean = (code || '').trim() || DEFAULT_SYNC_CODE;
+  storage.setString(StorageKeys.SYNC_CODE, clean);
+}
+
+/** 获取自定义同步服务器地址（可选） */
+export function getSyncServerUrl(): string {
+  if (typeof window === 'undefined') return '';
+  return storage.getString(StorageKeys.SYNC_SERVER_URL) || '';
+}
+
+/** 设置自定义同步服务器地址 */
+export function setSyncServerUrl(url: string): void {
+  storage.setString(StorageKeys.SYNC_SERVER_URL, (url || '').trim());
+}
+
 /**
- * 获取本机的唯一设备识别码
- * 1. 优先读取 Android 原生层注入的 Settings.Secure.ANDROID_ID (同一签名下卸载重装终身不变)
- * 2. 否则读取/生成本地持久化的 UUID
+ * 获取本机的唯一设备识别码（用于日志与来源追踪）
  */
 export function getDeviceId(): string {
   if (typeof window !== 'undefined') {
@@ -56,15 +94,24 @@ export function setLastSyncTime(time: number): void {
   }
 }
 
+/** 将暗号转换为安全的网络路径标识 */
+function getSafeSyncPath(syncCode: string): string {
+  const alphanumeric = syncCode.replace(/[^a-zA-Z0-9]/g, '');
+  return `mp3tao_sync_${alphanumeric || 'SKY0608'}`;
+}
+
 /**
- * 静默备份收藏到云端
+ * 将收藏数据备份到云端（以暗号 SKY-0608 为凭证）
  */
 export async function backupFavoritesToCloud(favorites: {
   songs: Song[];
   playlists: FavoritePlaylist[];
   artists: FavoriteArtist[];
-}): Promise<boolean> {
+}): Promise<{ success: boolean; message?: string }> {
+  const syncCode = getSyncCode();
   const deviceId = getDeviceId();
+  const now = Date.now();
+
   try {
     // 过滤在线歌曲临时的短期有效流 url，保持数据纯净
     const cleanedSongs = (favorites.songs || []).map(s => ({
@@ -72,9 +119,12 @@ export async function backupFavoritesToCloud(favorites: {
       url: s.isLocal ? (s.localPath || s.url) : null,
     }));
 
-    const payload = {
-      action: 'backup',
+    const payload: FavoritesBackupData = {
+      version: '1.0',
+      app: 'MP3Tao',
+      syncCode,
       deviceId,
+      exportedAt: now,
       favorites: {
         songs: cleanedSongs,
         playlists: favorites.playlists || [],
@@ -82,31 +132,66 @@ export async function backupFavoritesToCloud(favorites: {
       },
     };
 
-    const resp = await fetch('/api/sync', {
+    const serverUrl = getSyncServerUrl();
+
+    // 1. 若配置了自定义云端同步服务器
+    if (serverUrl) {
+      try {
+        const resp = await universalFetch(`${serverUrl.replace(/\/+$/, '')}/api/sync`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Device-Id': deviceId,
+            'X-Sync-Code': syncCode,
+          },
+          body: JSON.stringify({
+            action: 'backup',
+            syncCode,
+            deviceId,
+            favorites: payload.favorites,
+          }),
+        });
+        if (resp.ok) {
+          const resData = await resp.json();
+          if (resData.success) {
+            setLastSyncTime(now);
+            return { success: true };
+          }
+        }
+      } catch (custErr) {
+        console.warn('Custom sync server failed, falling back to public relay:', custErr);
+      }
+    }
+
+    // 2. 默认开箱即用公网极速同步通道（以暗号构建专属云中继）
+    const path = getSafeSyncPath(syncCode);
+    const postBody = new URLSearchParams({
+      content: JSON.stringify(payload),
+    }).toString();
+
+    const resp = await universalFetch(`https://cl1p.net/${path}`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'X-Device-Id': deviceId,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
       },
-      body: JSON.stringify(payload),
+      body: postBody,
     });
 
     if (resp.ok) {
-      const data = await resp.json();
-      if (data.success) {
-        setLastSyncTime(data.updatedAt || Date.now());
-        return true;
-      }
+      setLastSyncTime(now);
+      return { success: true };
     }
-    return false;
-  } catch (err) {
-    console.warn('[SyncService] Cloud backup warning:', err);
-    return false;
+
+    return { success: false, message: `上传状态码异常: ${resp.status}` };
+  } catch (err: any) {
+    console.error('[SyncService] Cloud backup error:', err);
+    return { success: false, message: err?.message || '网络连接异常' };
   }
 }
 
 /**
- * 从云端拉取恢复收藏数据
+ * 从云端拉取恢复收藏数据（以暗号 SKY-0608 为凭证）
  */
 export async function restoreFavoritesFromCloud(): Promise<{
   songs: Song[];
@@ -114,31 +199,83 @@ export async function restoreFavoritesFromCloud(): Promise<{
   artists: FavoriteArtist[];
   updatedAt: number;
 } | null> {
+  const syncCode = getSyncCode();
   const deviceId = getDeviceId();
+  const serverUrl = getSyncServerUrl();
+
   try {
-    const resp = await fetch(`/api/sync?action=restore&deviceId=${encodeURIComponent(deviceId)}`, {
-      method: 'GET',
+    // 1. 若配置了自定义云端同步服务器
+    if (serverUrl) {
+      try {
+        const resp = await universalFetch(
+          `${serverUrl.replace(/\/+$/, '')}/api/sync?action=restore&syncCode=${encodeURIComponent(syncCode)}&deviceId=${encodeURIComponent(deviceId)}`,
+          {
+            method: 'GET',
+            headers: {
+              'X-Device-Id': deviceId,
+              'X-Sync-Code': syncCode,
+            },
+          }
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.success && data.favorites) {
+            const fav = data.favorites;
+            const songs = Array.isArray(fav.songs) ? fav.songs : [];
+            const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
+            const artists = Array.isArray(fav.artists) ? fav.artists : [];
+            if (data.updatedAt) setLastSyncTime(data.updatedAt);
+            return {
+              songs,
+              playlists,
+              artists,
+              updatedAt: data.updatedAt || 0,
+            };
+          }
+        }
+      } catch (custErr) {
+        console.warn('Custom sync restore failed, fallback to public relay:', custErr);
+      }
+    }
+
+    // 2. 默认开箱即用公网极速同步通道
+    const path = getSafeSyncPath(syncCode);
+    const resp = await universalFetch(`https://cl1p.net/${path}`, {
       headers: {
-        'X-Device-Id': deviceId,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
       },
     });
 
     if (resp.ok) {
-      const data = await resp.json();
-      if (data.success && data.favorites) {
-        const fav = data.favorites;
-        const songs = Array.isArray(fav.songs) ? fav.songs : [];
-        const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
-        const artists = Array.isArray(fav.artists) ? fav.artists : [];
-        if (data.updatedAt) {
-          setLastSyncTime(data.updatedAt);
+      const html = await resp.text();
+      const match =
+        html.match(/<textarea[^>]*id=["']cl1ptextarea["'][^>]*>([\s\S]*?)<\/textarea>/i) ||
+        html.match(/<textarea[^>]*>([\s\S]*?)<\/textarea>/i);
+
+      if (match && match[1]) {
+        const rawContent = match[1]
+          .replace(/&quot;/g, '"')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>');
+
+        try {
+          const parsed = JSON.parse(rawContent);
+          const fav = parsed.favorites || parsed;
+          const songs = Array.isArray(fav.songs) ? fav.songs : [];
+          const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
+          const artists = Array.isArray(fav.artists) ? fav.artists : [];
+          const updatedAt = parsed.exportedAt || parsed.updatedAt || 0;
+          if (updatedAt) setLastSyncTime(updatedAt);
+          return {
+            songs,
+            playlists,
+            artists,
+            updatedAt,
+          };
+        } catch (jsonErr) {
+          console.warn('[SyncService] Parse cloud json warning:', jsonErr);
         }
-        return {
-          songs,
-          playlists,
-          artists,
-          updatedAt: data.updatedAt || 0,
-        };
       }
     }
     return null;
@@ -146,6 +283,48 @@ export async function restoreFavoritesFromCloud(): Promise<{
     console.warn('[SyncService] Cloud restore warning:', err);
     return null;
   }
+}
+
+/**
+ * 智能合并本地与云端收藏（并集去重）
+ */
+export function mergeFavoritesData(
+  local: { songs: Song[]; playlists: FavoritePlaylist[]; artists: FavoriteArtist[] },
+  cloud: { songs: Song[]; playlists: FavoritePlaylist[]; artists: FavoriteArtist[] }
+) {
+  // 1. 合并歌曲 (以 ID 去重)
+  const songMap = new Map<string, Song>();
+  (local.songs || []).forEach(s => songMap.set(s.id, s));
+  (cloud.songs || []).forEach(s => {
+    if (!songMap.has(s.id)) {
+      songMap.set(s.id, s);
+    }
+  });
+
+  // 2. 合并歌单 (以 ID 去重)
+  const playlistMap = new Map<string, FavoritePlaylist>();
+  (local.playlists || []).forEach(p => playlistMap.set(p.id, p));
+  (cloud.playlists || []).forEach(p => {
+    if (!playlistMap.has(p.id)) {
+      playlistMap.set(p.id, p);
+    }
+  });
+
+  // 3. 合并歌手 (以 ID 或 name 去重)
+  const artistMap = new Map<string, FavoriteArtist>();
+  (local.artists || []).forEach(a => artistMap.set(a.id || a.name, a));
+  (cloud.artists || []).forEach(a => {
+    const key = a.id || a.name;
+    if (!artistMap.has(key)) {
+      artistMap.set(key, a);
+    }
+  });
+
+  return {
+    songs: Array.from(songMap.values()),
+    playlists: Array.from(playlistMap.values()),
+    artists: Array.from(artistMap.values()),
+  };
 }
 
 /**
@@ -157,9 +336,11 @@ export function exportFavoritesToFile(favorites: {
   artists: FavoriteArtist[];
 }) {
   try {
+    const syncCode = getSyncCode();
     const backup: FavoritesBackupData = {
       version: '1.0',
       app: 'MP3Tao',
+      syncCode,
       deviceId: getDeviceId(),
       exportedAt: Date.now(),
       favorites: {
@@ -176,7 +357,7 @@ export function exportFavoritesToFile(favorites: {
     const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `MP3Tao_收藏备份_${dateStr}.json`;
+    const filename = `MP3Tao_收藏备份_${syncCode}_${dateStr}.json`;
 
     const a = document.createElement('a');
     a.href = url;
@@ -203,14 +384,13 @@ export async function importFavoritesFromFile(file: File): Promise<{
 }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = e => {
       try {
         const text = e.target?.result as string;
         if (!text) {
           throw new Error('文件内容为空');
         }
         const data = JSON.parse(text);
-        // 支持标准备份结构或纯数组结构
         let songs: Song[] = [];
         let playlists: FavoritePlaylist[] = [];
         let artists: FavoriteArtist[] = [];
@@ -220,7 +400,6 @@ export async function importFavoritesFromFile(file: File): Promise<{
           playlists = Array.isArray(data.favorites.playlists) ? data.favorites.playlists : [];
           artists = Array.isArray(data.favorites.artists) ? data.favorites.artists : [];
         } else if (Array.isArray(data)) {
-          // 兼容纯歌曲数组导入
           songs = data;
         } else if (Array.isArray(data.songs)) {
           songs = data.songs;
