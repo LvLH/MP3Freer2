@@ -12,6 +12,7 @@ export const FavoritePanel: React.FC = () => {
     favoriteArtists,
     playSong,
     addToPlaylist,
+    toggleFavorite,
     exportFavorites,
     importFavorites,
     syncFavoritesNow,
@@ -273,6 +274,14 @@ export const FavoritePanel: React.FC = () => {
                         title="添加到播放列表"
                       >
                         <Plus size={14} />
+                      </button>
+                      <button
+                        className="song-row-action-btn active"
+                        onClick={() => void toggleFavorite(song)}
+                        title="取消收藏"
+                        style={{ color: '#ef4444' }}
+                      >
+                        <Heart size={14} fill="#ef4444" color="#ef4444" />
                       </button>
                     </div>
                   </div>

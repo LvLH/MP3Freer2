@@ -1227,8 +1227,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           url: filePath,
           isLocal: true,
           localPath: filePath,
-          lyric: lyricText,
         };
+        delete songToSave.lyric;
         upsertFavorite(songToSave);
       } catch (err) {
         if (favoriteDownloadTokenRef.current.get(song.id) !== downloadToken) return;

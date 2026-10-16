@@ -39,7 +39,7 @@ const formatCount = (count?: number) => {
 };
 
 export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) => {
-  const { playSong, addToPlaylist, playAll, addAllToPlaylist, isFavoritePlaylist, toggleFavoritePlaylist } = usePlayer();
+  const { playSong, addToPlaylist, playAll, addAllToPlaylist, isFavoritePlaylist, toggleFavoritePlaylist, isFavorite, toggleFavorite } = usePlayer();
   const toast = useToast();
   const [keyword, setKeyword] = useState<string>('');
   const [activeKeyword, setActiveKeyword] = useState<string>('');
@@ -381,6 +381,20 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             <button className="song-row-action-btn" onClick={() => addToPlaylist(toPlayerSong(song))} title={TEXT.addQueue}>
               <Plus size={14} />
             </button>
+            {(() => {
+              const playerSong = toPlayerSong(song);
+              const isFav = isFavorite(playerSong.id);
+              return (
+                <button
+                  className={`song-row-action-btn ${isFav ? 'active' : ''}`}
+                  onClick={() => void toggleFavorite(playerSong)}
+                  title={isFav ? "取消收藏" : "收藏歌曲"}
+                  style={isFav ? { color: '#ef4444' } : undefined}
+                >
+                  <Heart size={14} fill={isFav ? '#ef4444' : 'none'} color={isFav ? '#ef4444' : 'currentColor'} />
+                </button>
+              );
+            })()}
           </div>
         </div>
       ))}

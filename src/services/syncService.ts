@@ -113,6 +113,15 @@ function getSafeSyncPath(syncCode: string): string {
   return `mp3tao_sync_${alphanumeric || 'SKY0608'}`;
 }
 
+/** 纯净化收藏歌曲：剥离临时流地址及大段歌词文本，大幅缩减体积并加速同步与持久化 */
+export function sanitizeFavoriteSong(s: Song): Song {
+  const { lyric, ...rest } = s;
+  return {
+    ...rest,
+    url: s.isLocal ? (s.localPath || s.url || null) : null,
+  };
+}
+
 /**
  * 将收藏数据备份到云端（以暗号 SKY-0608 为凭证）
  */
@@ -126,11 +135,8 @@ export async function backupFavoritesToCloud(favorites: {
   const now = Date.now();
 
   try {
-    // 过滤在线歌曲临时的短期有效流 url，保持数据纯净
-    const cleanedSongs = (favorites.songs || []).map(s => ({
-      ...s,
-      url: s.isLocal ? (s.localPath || s.url) : null,
-    }));
+    // 过滤在线歌曲临时的短期有效流 url 并剔除歌词文本，保持数据极简轻量
+    const cleanedSongs = (favorites.songs || []).map(sanitizeFavoriteSong);
 
     const payload: FavoritesBackupData = {
       version: '1.0',
@@ -275,7 +281,8 @@ export async function restoreFavoritesFromCloud(): Promise<{
         try {
           const parsed = JSON.parse(rawContent);
           const fav = parsed.favorites || parsed;
-          const songs = Array.isArray(fav.songs) ? fav.songs : [];
+          const rawSongs = Array.isArray(fav.songs) ? fav.songs : [];
+          const songs = rawSongs.map(sanitizeFavoriteSong);
           const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
           const artists = Array.isArray(fav.artists) ? fav.artists : [];
           const updatedAt = parsed.exportedAt || parsed.updatedAt || 0;
@@ -299,18 +306,18 @@ export async function restoreFavoritesFromCloud(): Promise<{
 }
 
 /**
- * 智能合并本地与云端收藏（并集去重）
+ * 智能合并本地与云端收藏（并集去重，剥离歌词与失效流地址）
  */
 export function mergeFavoritesData(
   local: { songs: Song[]; playlists: FavoritePlaylist[]; artists: FavoriteArtist[] },
   cloud: { songs: Song[]; playlists: FavoritePlaylist[]; artists: FavoriteArtist[] }
 ) {
-  // 1. 合并歌曲 (以 ID 去重)
+  // 1. 合并歌曲 (以 ID 去重并纯净化)
   const songMap = new Map<string, Song>();
-  (local.songs || []).forEach(s => songMap.set(s.id, s));
+  (local.songs || []).forEach(s => songMap.set(s.id, sanitizeFavoriteSong(s)));
   (cloud.songs || []).forEach(s => {
     if (!songMap.has(s.id)) {
-      songMap.set(s.id, s);
+      songMap.set(s.id, sanitizeFavoriteSong(s));
     }
   });
 
@@ -341,7 +348,7 @@ export function mergeFavoritesData(
 }
 
 /**
- * 导出收藏为 JSON 文件并触发下载
+ * 导出收藏为轻量 JSON 文件并触发下载（彻底剔除歌词与临时流地址）
  */
 export function exportFavoritesToFile(favorites: {
   songs: Song[];
@@ -357,10 +364,7 @@ export function exportFavoritesToFile(favorites: {
       deviceId: getDeviceId(),
       exportedAt: Date.now(),
       favorites: {
-        songs: (favorites.songs || []).map(s => ({
-          ...s,
-          url: s.isLocal ? (s.localPath || s.url) : null,
-        })),
+        songs: (favorites.songs || []).map(sanitizeFavoriteSong),
         playlists: favorites.playlists || [],
         artists: favorites.artists || [],
       },
@@ -388,7 +392,7 @@ export function exportFavoritesToFile(favorites: {
 }
 
 /**
- * 从上传的 JSON 文件中解析收藏数据
+ * 从上传的 JSON 文件中解析收藏数据（自动剔除大段歌词）
  */
 export async function importFavoritesFromFile(file: File): Promise<{
   songs: Song[];
@@ -422,7 +426,11 @@ export async function importFavoritesFromFile(file: File): Promise<{
           throw new Error('无法识别的收藏备份格式');
         }
 
-        resolve({ songs, playlists, artists });
+        resolve({
+          songs: songs.map(sanitizeFavoriteSong),
+          playlists,
+          artists,
+        });
       } catch (err: any) {
         reject(err);
       }

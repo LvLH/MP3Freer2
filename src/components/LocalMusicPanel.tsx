@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { FolderOpen, Play, Plus, Music, RefreshCw, ArrowUp } from 'lucide-react';
+import { FolderOpen, Play, Plus, Music, RefreshCw, ArrowUp, Heart } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { openPath } from '@tauri-apps/plugin-opener';
 
 export const LocalMusicPanel: React.FC = () => {
-  const { localSongs, importLocalDirectory, playSong, addToPlaylist, localDirectory, refreshLocalDirectory } = usePlayer();
+  const { localSongs, importLocalDirectory, playSong, addToPlaylist, localDirectory, refreshLocalDirectory, isFavorite, toggleFavorite } = usePlayer();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -103,22 +103,30 @@ export const LocalMusicPanel: React.FC = () => {
                     {song.localPath ? song.localPath.split('\\').pop()?.split('/').pop() : ''}
                   </div>
 
-                  <div className="song-row-actions">
-                    <button 
-                      className="song-row-action-btn"
-                      onClick={() => playSong(song)}
-                      title="立即播放"
-                    >
-                      <Play size={14} fill="currentColor" />
-                    </button>
-                    <button 
-                      className="song-row-action-btn"
-                      onClick={() => addToPlaylist(song)}
-                      title="添加到播放列表"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
+                    <div className="song-row-actions">
+                      <button 
+                        className="song-row-action-btn"
+                        onClick={() => playSong(song)}
+                        title="立即播放"
+                      >
+                        <Play size={14} fill="currentColor" />
+                      </button>
+                      <button 
+                        className="song-row-action-btn"
+                        onClick={() => addToPlaylist(song)}
+                        title="添加到播放列表"
+                      >
+                        <Plus size={14} />
+                      </button>
+                      <button
+                        className={`song-row-action-btn ${isFavorite(song.id) ? 'active' : ''}`}
+                        onClick={() => void toggleFavorite(song)}
+                        title={isFavorite(song.id) ? "取消收藏" : "收藏歌曲"}
+                        style={isFavorite(song.id) ? { color: '#ef4444' } : undefined}
+                      >
+                        <Heart size={14} fill={isFavorite(song.id) ? '#ef4444' : 'none'} color={isFavorite(song.id) ? '#ef4444' : 'currentColor'} />
+                      </button>
+                    </div>
                 </div>
               ))}
             </div>

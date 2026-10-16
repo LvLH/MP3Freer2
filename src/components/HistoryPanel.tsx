@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Play, Plus, Trash2, ArrowUp, Flame, Clock, ListPlus } from 'lucide-react';
+import { Play, Plus, Trash2, ArrowUp, Flame, Clock, ListPlus, Heart } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import type { Song } from '../types/music';
 import { MUSIC_SOURCES } from '../settings';
@@ -28,6 +28,8 @@ export const HistoryPanel: React.FC = () => {
     addToPlaylist,
     addAllToPlaylist,
     clearPlayHistory,
+    isFavorite,
+    toggleFavorite,
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<'recent' | 'top'>('recent');
@@ -168,6 +170,14 @@ export const HistoryPanel: React.FC = () => {
           title="添加到播放列表"
         >
           <Plus size={14} />
+        </button>
+        <button
+          className={`song-row-action-btn ${isFavorite(song.id) ? 'active' : ''}`}
+          onClick={() => void toggleFavorite(song)}
+          title={isFavorite(song.id) ? "取消收藏" : "收藏歌曲"}
+          style={isFavorite(song.id) ? { color: '#ef4444' } : undefined}
+        >
+          <Heart size={14} fill={isFavorite(song.id) ? '#ef4444' : 'none'} color={isFavorite(song.id) ? '#ef4444' : 'currentColor'} />
         </button>
       </div>
     </div>

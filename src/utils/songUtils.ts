@@ -33,19 +33,24 @@ export function resolveOnlineApiId(song: Song): string {
 }
 
 /**
- * 规范化在线歌曲身份，并剥离易过期的流地址。
- * 用于从 localStorage 恢复旧数据（曾用原始平台 id 或写入了 CDN url）。
+ * 规范化歌曲身份，剥离易过期的在线流地址与大段歌词文本（歌词播放时动态拉取或读本地 .lrc，不入库）。
+ * 用于从 localStorage 恢复旧数据（曾用原始平台 id、写入了 CDN url 或包含庞大歌词文本）。
  */
 export function normalizePersistedSong(song: Song): Song {
-  if (song.isLocal) return song;
+  const { lyric, ...rest } = song;
+  if (song.isLocal) {
+    return {
+      ...rest,
+      url: song.localPath || song.url || null,
+    };
+  }
 
   const originalId = resolveOnlineApiId(song);
   const canonicalId = `online_${song.source}_${originalId}`;
   return {
-    ...song,
+    ...rest,
     id: canonicalId,
     originalId,
-    // 已下载到本地的收藏会把 isLocal 设为 true；纯在线条目不保留 url
     url: null,
   };
 }
@@ -61,11 +66,13 @@ export function normalizePersistedHistory(entries: HistoryEntry[]): HistoryEntry
   }));
 }
 
-/** 持久化前剥离在线流 URL，避免重启后复用失效链接 */
+/** 持久化前剥离在线流 URL 与歌词文本，避免占用大量存储空间与复用失效链接 */
 export function stripEphemeralStreamUrl(song: Song): Song {
-  if (song.isLocal) return song;
-  if (!song.url) return song;
-  return { ...song, url: null };
+  const { lyric, ...rest } = song;
+  if (song.isLocal) {
+    return { ...rest, url: song.localPath || song.url || null };
+  }
+  return { ...rest, url: null };
 }
 
 export function sanitizeFileName(fileName: string): string {
