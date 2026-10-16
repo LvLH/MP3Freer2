@@ -186,6 +186,7 @@ export async function backupFavoritesToCloud(favorites: {
     const path = getSafeSyncPath(syncCode);
     const postBody = new URLSearchParams({
       content: JSON.stringify(payload),
+      ttl: '1550', // 必须携带 ttl，防止 cl1p.net 默认按 0（Destroy cl1p when viewed 阅后即焚）处理！
     }).toString();
 
     const resp = await universalFetch(`https://cl1p.net/${path}`, {
@@ -210,7 +211,7 @@ export async function backupFavoritesToCloud(favorites: {
 }
 
 /**
- * 从云端拉取恢复收藏数据（以暗号 SKY-0608 为凭证）
+ * 从云端拉取恢复收藏数据（以暗号为凭证）
  */
 export async function restoreFavoritesFromCloud(): Promise<{
   songs: Song[];
@@ -271,12 +272,18 @@ export async function restoreFavoritesFromCloud(): Promise<{
         html.match(/<textarea[^>]*id=["']cl1ptextarea["'][^>]*>([\s\S]*?)<\/textarea>/i) ||
         html.match(/<textarea[^>]*>([\s\S]*?)<\/textarea>/i);
 
-      if (match && match[1]) {
+      if (match && match[1] && match[1].trim().length > 0) {
+        // 严格安全地解码 HTML 实体（&amp; 必须最后替换，避免破坏其它实体转义）
         const rawContent = match[1]
           .replace(/&quot;/g, '"')
-          .replace(/&amp;/g, '&')
+          .replace(/&apos;/g, "'")
+          .replace(/&#39;/g, "'")
           .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>');
+          .replace(/&gt;/g, '>')
+          .replace(/&amp;/g, '&')
+          .trim();
+
+        if (!rawContent || rawContent === '{}') return null;
 
         try {
           const parsed = JSON.parse(rawContent);

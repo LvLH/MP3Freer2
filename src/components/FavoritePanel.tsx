@@ -44,11 +44,11 @@ export const FavoritePanel: React.FC = () => {
     }
   };
 
-  const handleSaveSyncCode = () => {
+  const handleSaveSyncCode = async (pullCloud = true) => {
     const trimmed = tempCode.trim();
     if (!trimmed) return;
-    updateSyncCode(trimmed);
     setShowCodeModal(false);
+    await updateSyncCode(trimmed, pullCloud);
   };
 
   const formatSecs = (secs: number) => {
@@ -473,8 +473,7 @@ export const FavoritePanel: React.FC = () => {
                 type="button"
                 onClick={() => setShowCodeModal(false)}
                 style={{
-                  flex: 1,
-                  padding: '9px 0',
+                  padding: '9px 14px',
                   borderRadius: 8,
                   fontSize: 13,
                   background: 'rgba(255,255,255,0.06)',
@@ -487,7 +486,23 @@ export const FavoritePanel: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={handleSaveSyncCode}
+                onClick={() => handleSaveSyncCode(false)}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  background: 'rgba(255,255,255,0.1)',
+                  color: '#e2e8f0',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  cursor: 'pointer',
+                }}
+              >
+                仅存暗号
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveSyncCode(true)}
+                title="保存暗号并自动拉取云端收藏进行同步"
                 style={{
                   flex: 1,
                   padding: '9px 0',
@@ -500,7 +515,7 @@ export const FavoritePanel: React.FC = () => {
                   cursor: 'pointer',
                 }}
               >
-                保存暗号
+                保存并拉取云端
               </button>
             </div>
 
