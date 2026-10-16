@@ -12,6 +12,8 @@ export const FavoritePanel: React.FC = () => {
     favoriteArtists,
     playSong,
     addToPlaylist,
+    playAll,
+    addAllToPlaylist,
     toggleFavorite,
     exportFavorites,
     importFavorites,
@@ -141,7 +143,7 @@ export const FavoritePanel: React.FC = () => {
               }}
             >
               <RefreshCw size={13} className={isSyncing ? 'spin' : ''} />
-              <span>{isSyncing ? '同步中...' : '立即双向同步'}</span>
+              <span>{isSyncing ? '同步中...' : '同步'}</span>
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -160,7 +162,7 @@ export const FavoritePanel: React.FC = () => {
               }}
             >
               <Upload size={13} />
-              <span>导入备份</span>
+              <span>导入</span>
             </button>
             <button
               onClick={exportFavorites}
@@ -179,7 +181,7 @@ export const FavoritePanel: React.FC = () => {
               }}
             >
               <Download size={13} />
-              <span>导出备份</span>
+              <span>导出</span>
             </button>
           </div>
         </div>
@@ -239,6 +241,22 @@ export const FavoritePanel: React.FC = () => {
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <h3>全部收藏 ({favoriteSongs.length})</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    className="song-row-action-btn"
+                    onClick={() => playAll(favoriteSongs)}
+                    title="全部播放"
+                  >
+                    <Play size={14} fill="currentColor" />
+                  </button>
+                  <button
+                    className="song-row-action-btn"
+                    onClick={() => addAllToPlaylist(favoriteSongs)}
+                    title="全部加入播放列表"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
               </div>
               <div className="song-list-container">
                 {favoriteSongs.map((song, index) => (
