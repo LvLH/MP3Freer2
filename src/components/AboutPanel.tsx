@@ -6,6 +6,7 @@ import {
   getDefaultSearchSource,
   getEnabledApiEndpoints,
   getPreferredQuality,
+  getPreloadNextSong,
   MUSIC_SOURCES,
   MusicSource,
   QUALITY_OPTIONS,
@@ -13,6 +14,7 @@ import {
   setDefaultSearchSource,
   setEnabledApiEndpoints,
   setPreferredQuality,
+  setPreloadNextSong,
 } from '../settings';
 import { usePlayer } from '../context/PlayerContext';
 import { resourceCache } from '../services/cache';
@@ -32,6 +34,7 @@ export const AboutPanel: React.FC = () => {
   const [searchSource, setSearchSource] = useState<MusicSource>('netease');
   const [enabledEndpoints, setEnabledEndpointsState] = useState<string[]>([]);
   const [preferredQuality, setPreferredQualityState] = useState<AudioQuality>('high');
+  const [preloadNextSong, setPreloadNextSongState] = useState<boolean>(() => getPreloadNextSong());
   const [isSyncing, setIsSyncing] = useState(false);
   const [inputCode, setInputCode] = useState(syncCode);
   const [serverUrl, setServerUrlState] = useState(() => getSyncServerUrl());
@@ -48,7 +51,13 @@ export const AboutPanel: React.FC = () => {
 
     setPreferredQualityState(getPreferredQuality());
     setEnabledEndpointsState(getEnabledApiEndpoints());
+    setPreloadNextSongState(getPreloadNextSong());
   }, []);
+
+  const handlePreloadToggle = (enabled: boolean) => {
+    setPreloadNextSongState(enabled);
+    setPreloadNextSong(enabled);
+  };
 
   const handleQualityChange = (quality: AudioQuality) => {
     setPreferredQualityState(quality);
@@ -137,6 +146,25 @@ export const AboutPanel: React.FC = () => {
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+
+          <div className="setting-row">
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <div>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>自动预加载下一首歌曲</span>
+                <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
+                  当前歌曲稳定播放后，自动在后台提前预缓冲下一首歌曲的音频数据，切歌秒开无缝衔接。
+                </p>
+              </div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={preloadNextSong}
+                  onChange={e => handlePreloadToggle(e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: '#10b981', cursor: 'pointer' }}
+                />
+              </label>
             </div>
           </div>
 

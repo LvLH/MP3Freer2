@@ -113,11 +113,11 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyri
           <div className="mobile-player-progress-track">
             <div
               className="mobile-player-progress-fill"
-              style={{ width: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+              style={{ width: `${(!isLoading && duration > 0) ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
             />
             <div
               className="mobile-player-progress-thumb"
-              style={{ left: `${duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
+              style={{ left: `${(!isLoading && duration > 0) ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
             />
           </div>
           <input
@@ -125,7 +125,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyri
             min={0}
             max={duration || 100}
             step={0.1}
-            value={currentTime}
+            value={isLoading || duration <= 0 ? 0 : currentTime}
             onChange={handleProgressChange}
             className="mobile-player-progress-input"
             title="拖动调整播放进度"
@@ -208,13 +208,13 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyri
         </div>
 
         <div className="progress-container">
-          <span className="time-text">{formatTime(currentTime)}</span>
+          <span className="time-text">{formatTime(isLoading || duration <= 0 ? 0 : currentTime)}</span>
           <div className="slider-bar">
             <input
               type="range"
               min={0}
               max={duration || 100}
-              value={currentTime}
+              value={isLoading || duration <= 0 ? 0 : currentTime}
               onChange={handleProgressChange}
               style={{
                 position: 'absolute',
@@ -229,11 +229,11 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyri
             />
             <div
               className="slider-fill"
-              style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+              style={{ width: `${(!isLoading && duration > 0) ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
             ></div>
             <div
               className="slider-thumb"
-              style={{ left: `${(currentTime / (duration || 1)) * 100}%` }}
+              style={{ left: `${(!isLoading && duration > 0) ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
             ></div>
           </div>
           <span className="time-text right">{formatTime(duration)}</span>

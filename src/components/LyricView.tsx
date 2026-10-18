@@ -14,7 +14,7 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
   const {
     currentSong, lyrics, currentLyricIndex, seekTo,
     playlist, playIndex, playSong, togglePlay, prevSong, nextSong,
-    showTranslation, removeFromPlaylist,
+    showTranslation, removeFromPlaylist, isLoading,
   } = usePlayer();
   // 播放进度/状态走独立 store，避免随 usePlayer 的其它字段一起重渲染
   const { currentTime, duration, isPlaying } = usePlaybackProgress();
@@ -244,14 +244,14 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="lyric-progress-wrapper" style={{ margin: '16px 15% 0 15%', width: '70%', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatSecs(currentTime)}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatSecs(isLoading || duration <= 0 ? 0 : currentTime)}</span>
           <div className="slider-bar" style={{ flex: 1 }}>
             <input
               type="range"
               min={0}
               max={duration || 100}
               step={0.1}
-              value={currentTime}
+              value={isLoading || duration <= 0 ? 0 : currentTime}
               onChange={handleSeek}
               style={{
                 position: 'absolute',
@@ -266,11 +266,11 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
             />
             <div
               className="slider-fill"
-              style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+              style={{ width: `${(!isLoading && duration > 0) ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
             ></div>
             <div
               className="slider-thumb"
-              style={{ left: `${(currentTime / (duration || 1)) * 100}%` }}
+              style={{ left: `${(!isLoading && duration > 0) ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0}%` }}
             ></div>
           </div>
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{formatSecs(duration)}</span>

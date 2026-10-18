@@ -5,7 +5,7 @@ export type MusicSource = 'netease' | 'tencent' | 'kugou' | 'kuwo' | 'migu';
  * package.json / tauri.conf.json / Cargo.toml 必须与此保持一致。
  * 显示时统一带 v 前缀。
  */
-export const APP_VERSION = '26.8.29';
+export const APP_VERSION = '26.10.18';
 
 /** 音质档位：标准 128 / 高品 320 / 无损 / Hi-Res */
 export type AudioQuality = 'standard' | 'high' | 'lossless' | 'hires';
@@ -155,4 +155,21 @@ export function setDownloadOnFavorite(enabled: boolean) {
 
 export function getQualityBr(quality: AudioQuality): string {
   return QUALITY_OPTIONS.find(q => q.id === quality)?.br || '320';
+}
+
+/** 自动预加载下一首歌曲音频：默认开启，切歌秒开无缝缓冲 */
+export const PRELOAD_NEXT_SONG_KEY = 'mp3freer_preload_next_song';
+export const DEFAULT_PRELOAD_NEXT_SONG = true;
+
+export function getPreloadNextSong(): boolean {
+  if (typeof window === 'undefined') return DEFAULT_PRELOAD_NEXT_SONG;
+  const saved = localStorage.getItem(PRELOAD_NEXT_SONG_KEY);
+  if (saved === null) return DEFAULT_PRELOAD_NEXT_SONG;
+  return saved === 'true';
+}
+
+export function setPreloadNextSong(enabled: boolean): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(PRELOAD_NEXT_SONG_KEY, enabled ? 'true' : 'false');
+  }
 }

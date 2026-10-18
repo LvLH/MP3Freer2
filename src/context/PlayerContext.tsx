@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
 import { convertFileSrc } from '@tauri-apps/api/core';
+const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists, readDir, readTextFile, writeFile } from '@tauri-apps/plugin-fs';
 import { emit } from '@tauri-apps/api/event';
 import md5 from 'js-md5';
 import { MusicApiService } from '../services/musicApi';
-import { getDefaultSearchSource, getDownloadOnFavorite, getDownloadPath, getPreferredQuality } from '../settings';
+import { getDefaultSearchSource, getDownloadOnFavorite, getDownloadPath, getPreferredQuality, getPreloadNextSong } from '../settings';
 import { resolveImageUrl } from '../services/musicApi';
 import { readAudioMetadata, downloadFile } from '../services/rustBridge';
 import { useToast } from './ToastContext';
@@ -192,6 +192,28 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const endedGuardRef = useRef<boolean>(false);
   /** 收藏下载会话 token：取消收藏时递增，避免下载完成后把歌重新写回 */
   const favoriteDownloadTokenRef = useRef<Map<string, number>>(new Map());
+  /** 后台隐式音频预缓冲通道：仅预缓冲紧随其后的下一首，切歌秒开 */
+  const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!preloadAudioRef.current && typeof window !== 'undefined') {
+      const pAudio = new Audio();
+      pAudio.preload = 'auto';
+      pAudio.volume = 0;
+      pAudio.muted = true;
+      preloadAudioRef.current = pAudio;
+    }
+    return () => {
+      if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current);
+      if (preloadAudioRef.current) {
+        try {
+          preloadAudioRef.current.removeAttribute('src');
+          preloadAudioRef.current.load();
+        } catch (_) {}
+      }
+    };
+  }, []);
 
   // 频谱用 SpectrumVisualizer 模拟律动，不再挂 createMediaElementSource。
   // WebAudio 接管后若 AudioContext 被挂起（Android WebView 常见），会出现「在播但无声」。
@@ -230,6 +252,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // 声音是底线，频谱改为模拟律动（见 SpectrumVisualizer）。
 
     const onTimeUpdate = () => {
+      // 若当前没有可用音源或 audio 已被重置，切歌缓冲中跳过同步，避免脏数据闪烁
+      if (!audio.src || Number.isNaN(audio.currentTime)) return;
       playbackActions.setCurrentTime(audio.currentTime);
       // Android WebView 下隐藏/不可见的 <audio> 在自然播放结束时 ended 事件可能丢失，
       // 用 timeupdate 兜底：接近末尾且本次未处理过结束时主动连播。
@@ -243,7 +267,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
     const onDurationChange = () => {
-      if (audio.duration && !Number.isNaN(audio.duration)) {
+      if (audio.src && audio.duration && !Number.isNaN(audio.duration)) {
         playbackActions.setDuration(audio.duration);
         updateMediaSessionPositionState({
           duration: audio.duration,
@@ -408,27 +432,48 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateMediaSessionPlaybackState(isPlayingProgress);
   }, [isPlayingProgress]);
 
-  const prefetchNextSong = (currentIndex: number) => {
+  const prefetchNextSong = async (currentIndex: number) => {
     const pl = playlistRef.current;
     if (!pl || pl.length <= 1) return;
-    // 预热接下来两首歌曲的播放直链，确保锁屏/后台切歌时直链早已在内存缓存，0ms 瞬间无缝切歌
-    const targets = playModeRef.current === 'random'
-      ? [Math.floor(Math.random() * pl.length)]
-      : [(currentIndex + 1) % pl.length, (currentIndex + 2) % pl.length];
+    // 精准锁定紧随其后的下一首歌曲（只缓冲下一首，避免流量浪费与带宽竞争）
+    const targetIdx = playModeRef.current === 'random'
+      ? Math.floor(Math.random() * pl.length)
+      : (currentIndex + 1) % pl.length;
 
-    for (const nextIdx of targets) {
-      const nextSong = pl[nextIdx];
-      if (nextSong && !nextSong.isLocal) {
-        void resolveOnlinePlayUrl(nextSong).catch(() => {});
-        if (nextSong.pic_id) {
-          const cachedPic = resourceCache.getPic(nextSong.source, nextSong.pic_id);
-          if (!cachedPic) {
-            MusicApiService.getSongPic(nextSong.pic_id, nextSong.source)
-              .then(pic => { if (pic) resourceCache.setPic(nextSong.source, nextSong.pic_id!, pic); })
-              .catch(() => {});
-          }
+    const nextSong = pl[targetIdx];
+    if (!nextSong || nextSong.isLocal) {
+      if (preloadAudioRef.current) {
+        try {
+          preloadAudioRef.current.removeAttribute('src');
+          preloadAudioRef.current.load();
+        } catch (_) {}
+      }
+      return;
+    }
+
+    try {
+      // 1. 预热直链 URL 与封面图
+      const playUrl = await resolveOnlinePlayUrl(nextSong).catch(() => null);
+      if (nextSong.pic_id) {
+        const cachedPic = resourceCache.getPic(nextSong.source, nextSong.pic_id);
+        if (!cachedPic) {
+          MusicApiService.getSongPic(nextSong.pic_id, nextSong.source)
+            .then(pic => { if (pic) resourceCache.setPic(nextSong.source, nextSong.pic_id!, pic); })
+            .catch(() => {});
         }
       }
+
+      // 2. 音频数据后台预缓冲（若开启预加载，由后台无声通道提前拉取音频头与首批分块）
+      if (playUrl && getPreloadNextSong()) {
+        const pAudio = preloadAudioRef.current;
+        if (pAudio && pAudio.src !== playUrl) {
+          pAudio.src = playUrl;
+          pAudio.preload = 'auto';
+          pAudio.load();
+        }
+      }
+    } catch (e) {
+      console.warn('Prefetch next song audio failed:', e);
     }
   };
 
@@ -527,9 +572,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       onCanPlayRef.current = null;
     }
 
-    // 切断旧音频播放，切歌期间保持 audio 实例与会话连续性
+    // 切断旧音频播放并物理重置，清空旧 src 与时间，切歌期间彻底阻断旧音频发事件
     try {
       audio.pause();
+      audio.currentTime = 0;
+      audio.removeAttribute('src');
+      audio.load();
     } catch (_e) {}
 
     // 整段加载期间忽略 pause 同步：pause()/换 src/WebAudio 初始化都可能触发 pause
@@ -537,8 +585,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const wantPlay = playIntentRef.current || isPlayingRef.current;
     if (wantPlay) playIntentRef.current = true;
     
-    playbackActions.setCurrentTime(0);
-    playbackActions.setDuration(0);
+    playbackActions.reset();
     if (wantPlay) {
       isPlayingRef.current = true;
       playbackActions.setIsPlaying(true);
@@ -651,7 +698,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             playIntentRef.current = true;
             isPlayingRef.current = true;
             playbackActions.setIsPlaying(true);
-            prefetchNextSong(playIndexRef.current);
+            // 待当前歌曲稳定播放 4 秒后，自动在后台提前预缓冲下一首音频，避免与当前曲初始抢带宽
+            if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current);
+            prefetchTimerRef.current = setTimeout(() => {
+              void prefetchNextSong(playIndexRef.current);
+              prefetchTimerRef.current = null;
+            }, 4000);
           })
           .catch(err => {
             console.warn('Playback start deferred or pending in background:', err);
