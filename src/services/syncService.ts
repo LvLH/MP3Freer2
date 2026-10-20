@@ -27,8 +27,8 @@ export function generateRandomSyncCode(): string {
 }
 
 export const DEFAULT_SYNC_CODE = 'SKY-0608';
-/** 默认基于 Cloudflare Workers KV 的永久云端同步中继网关（无过期时间，永久保存） */
-export const DEFAULT_KV_RELAY_URL = 'https://mp3tao-sync.terrysky.workers.dev';
+/** 默认基于 Cloudflare Workers KV 的永久云端同步中继网关（用户专属长效永久存储） */
+export const DEFAULT_KV_RELAY_URL = 'https://mp3tao-sync.laihui126cn.workers.dev';
 const DEVICE_ID_KEY = 'mp3tao_device_id';
 const LAST_SYNC_TIME_KEY = 'mp3tao_last_sync_time';
 
@@ -39,6 +39,20 @@ async function universalFetch(url: string, options?: any) {
     return await tauriFetch(url, options);
   }
   return await fetch(url, options);
+}
+
+/** 带超时限制的请求封装（避免某些境外节点在国内无 VPN 时长时间挂起） */
+async function fetchWithTimeout(url: string, options?: any, timeoutMs = 3500): Promise<any> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`请求超时(${timeoutMs}ms)`)), timeoutMs);
+  });
+  try {
+    const fetchPromise = universalFetch(url, options);
+    return await Promise.race([fetchPromise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /** 获取当前同步暗号（若本地未设置，则自动按规则生成并持久化一个独立随机暗号） */
@@ -186,8 +200,9 @@ export async function backupFavoritesToCloud(favorites: {
 
     // 2. 默认开箱即用的 Cloudflare KV 永久持久化中继通道（无 TTL 限制，数据永久不丢）
     let kvSuccess = false;
+    const kvBaseUrl = DEFAULT_KV_RELAY_URL.replace(/\/+$/, '');
     try {
-      const kvResp = await universalFetch(`${DEFAULT_KV_RELAY_URL}/api/sync`, {
+      const kvResp = await fetchWithTimeout(`${kvBaseUrl}/api/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -200,8 +215,8 @@ export async function backupFavoritesToCloud(favorites: {
           deviceId,
           favorites: payload.favorites,
         }),
-      });
-      if (kvResp.ok) {
+      }, 3500);
+      if (kvResp && kvResp.ok) {
         const resData = await kvResp.json().catch(() => null);
         if (resData && resData.success) {
           kvSuccess = true;
@@ -209,7 +224,7 @@ export async function backupFavoritesToCloud(favorites: {
         }
       }
     } catch (kvErr) {
-      console.warn('Permanent KV relay push warning:', kvErr);
+      console.warn('Permanent KV relay push warning (likely blocked or slow without VPN):', kvErr);
     }
 
     // 3. 冗余公共中继通道（保留中划线，ttl 1550 作为双通道兜底）
@@ -295,18 +310,20 @@ export async function restoreFavoritesFromCloud(): Promise<{
     }
 
     // 2. 默认开箱即用的 Cloudflare KV 永久持久化中继通道（无 TTL 限制，支持永久读取）
+    const kvBaseUrl = DEFAULT_KV_RELAY_URL.replace(/\/+$/, '');
     try {
-      const kvResp = await universalFetch(
-        `${DEFAULT_KV_RELAY_URL}/api/sync?action=restore&syncCode=${encodeURIComponent(syncCode)}&deviceId=${encodeURIComponent(deviceId)}`,
+      const kvResp = await fetchWithTimeout(
+        `${kvBaseUrl}/api/sync?action=restore&syncCode=${encodeURIComponent(syncCode)}&deviceId=${encodeURIComponent(deviceId)}`,
         {
           method: 'GET',
           headers: {
             'X-Device-Id': deviceId,
             'X-Sync-Code': syncCode,
           },
-        }
+        },
+        3500
       );
-      if (kvResp.ok) {
+      if (kvResp && kvResp.ok) {
         const data = await kvResp.json().catch(() => null);
         if (data && data.success && data.favorites) {
           const fav = data.favorites;
@@ -321,7 +338,7 @@ export async function restoreFavoritesFromCloud(): Promise<{
         }
       }
     } catch (kvErr) {
-      console.warn('Permanent KV relay restore warning:', kvErr);
+      console.warn('Permanent KV relay restore warning (falling back to mirror):', kvErr);
     }
 
     // 3. 冗余公共中继通道（保留中划线，作为双通道兜底）
