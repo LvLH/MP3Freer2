@@ -282,7 +282,10 @@ export const AboutPanel: React.FC = () => {
                   <button
                     type="button"
                     className="primary-btn"
-                    onClick={() => updateSyncCode(inputCode)}
+                    onClick={() => {
+                      updateSyncCode(inputCode);
+                      alert(`✅ 同步暗号已保存：${inputCode}`);
+                    }}
                     style={{ height: 30, padding: '0 10px', fontSize: 12, borderRadius: 6 }}
                   >
                     保存暗号
@@ -353,7 +356,10 @@ export const AboutPanel: React.FC = () => {
                   <button
                     type="button"
                     className="primary-btn"
-                    onClick={() => setSyncServerUrl(serverUrl)}
+                    onClick={() => {
+                      setSyncServerUrl(serverUrl);
+                      alert(serverUrl ? `✅ 自建节点已保存：\n${serverUrl}` : '✅ 已清除自建节点，将使用默认云通道');
+                    }}
                     style={{ height: 30, padding: '0 10px', fontSize: 12, borderRadius: 6, background: 'rgba(255,255,255,0.08)' }}
                   >
                     保存节点
