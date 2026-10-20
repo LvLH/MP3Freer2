@@ -253,7 +253,7 @@ export const AboutPanel: React.FC = () => {
                 <span style={{ fontWeight: 600, fontSize: 14 }}>跨设备云端同步与数据迁移</span>
               </div>
               <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
-                不同设备（安卓手机、车载大屏、Windows 电脑）输入<strong>相同同步暗号</strong>即可双向互通；收藏歌曲时亦会自动静默备份。
+                已启用 <strong>Cloudflare KV 永久云端中继</strong>，不同设备（手机、车机、电脑）输入<strong>相同暗号</strong>即可双向互通，数据永久持久化不丢失。
               </p>
 
               {/* 同步暗号配置项 */}
@@ -337,7 +337,7 @@ export const AboutPanel: React.FC = () => {
                     value={serverUrl}
                     onChange={e => setServerUrlState(e.target.value)}
                     onBlur={() => setSyncServerUrl(serverUrl)}
-                    placeholder="选填，留空即默认使用高可用内置公网通道"
+                    placeholder="选填，留空即默认使用 Cloudflare KV 永久云通道"
                     style={{
                       flex: 1,
                       maxWidth: 280,

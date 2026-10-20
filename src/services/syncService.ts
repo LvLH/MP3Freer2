@@ -27,6 +27,8 @@ export function generateRandomSyncCode(): string {
 }
 
 export const DEFAULT_SYNC_CODE = 'SKY-0608';
+/** 默认基于 Cloudflare Workers KV 的永久云端同步中继网关（无过期时间，永久保存） */
+export const DEFAULT_KV_RELAY_URL = 'https://mp3tao-sync.terrysky.workers.dev';
 const DEVICE_ID_KEY = 'mp3tao_device_id';
 const LAST_SYNC_TIME_KEY = 'mp3tao_last_sync_time';
 
@@ -107,10 +109,10 @@ export function setLastSyncTime(time: number): void {
   }
 }
 
-/** 将暗号转换为安全的网络路径标识 */
+/** 将暗号转换为安全的网络路径标识（保留连字符与下划线，使用户在浏览器直连时与暗号字面完全对齐） */
 function getSafeSyncPath(syncCode: string): string {
-  const alphanumeric = syncCode.replace(/[^a-zA-Z0-9]/g, '');
-  return `mp3tao_sync_${alphanumeric || 'SKY0608'}`;
+  const safe = (syncCode || '').replace(/[^a-zA-Z0-9_-]/g, '');
+  return `mp3tao_sync_${safe || 'SKY-0608'}`;
 }
 
 /** 纯净化收藏歌曲：剥离临时流地址及大段歌词文本，大幅缩减体积并加速同步与持久化 */
@@ -153,7 +155,7 @@ export async function backupFavoritesToCloud(favorites: {
 
     const serverUrl = getSyncServerUrl();
 
-    // 1. 若配置了自定义云端同步服务器
+    // 1. 若配置了自定义云端同步服务器，优先推送到自定义服务器
     if (serverUrl) {
       try {
         const resp = await universalFetch(`${serverUrl.replace(/\/+$/, '')}/api/sync`, {
@@ -171,8 +173,8 @@ export async function backupFavoritesToCloud(favorites: {
           }),
         });
         if (resp.ok) {
-          const resData = await resp.json();
-          if (resData.success) {
+          const resData = await resp.json().catch(() => null);
+          if (resData && resData.success) {
             setLastSyncTime(now);
             return { success: true };
           }
@@ -182,28 +184,65 @@ export async function backupFavoritesToCloud(favorites: {
       }
     }
 
-    // 2. 默认开箱即用公网极速同步通道（以暗号构建专属云中继）
-    const path = getSafeSyncPath(syncCode);
-    const postBody = new URLSearchParams({
-      content: JSON.stringify(payload),
-      ttl: '1550', // 必须携带 ttl，防止 cl1p.net 默认按 0（Destroy cl1p when viewed 阅后即焚）处理！
-    }).toString();
+    // 2. 默认开箱即用的 Cloudflare KV 永久持久化中继通道（无 TTL 限制，数据永久不丢）
+    let kvSuccess = false;
+    try {
+      const kvResp = await universalFetch(`${DEFAULT_KV_RELAY_URL}/api/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Device-Id': deviceId,
+          'X-Sync-Code': syncCode,
+        },
+        body: JSON.stringify({
+          action: 'backup',
+          syncCode,
+          deviceId,
+          favorites: payload.favorites,
+        }),
+      });
+      if (kvResp.ok) {
+        const resData = await kvResp.json().catch(() => null);
+        if (resData && resData.success) {
+          kvSuccess = true;
+          setLastSyncTime(now);
+        }
+      }
+    } catch (kvErr) {
+      console.warn('Permanent KV relay push warning:', kvErr);
+    }
 
-    const resp = await universalFetch(`https://cl1p.net/${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      },
-      body: postBody,
-    });
+    // 3. 冗余公共中继通道（保留中划线，ttl 1550 作为双通道兜底）
+    let clipSuccess = false;
+    try {
+      const path = getSafeSyncPath(syncCode);
+      const postBody = new URLSearchParams({
+        content: JSON.stringify(payload),
+        ttl: '1550',
+      }).toString();
 
-    if (resp.ok) {
-      setLastSyncTime(now);
+      const resp = await universalFetch(`https://cl1p.net/${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+        body: postBody,
+      });
+
+      if (resp.ok) {
+        clipSuccess = true;
+        setLastSyncTime(now);
+      }
+    } catch (clipErr) {
+      console.warn('Fallback relay push warning:', clipErr);
+    }
+
+    if (kvSuccess || clipSuccess) {
       return { success: true };
     }
 
-    return { success: false, message: `上传状态码异常: ${resp.status}` };
+    return { success: false, message: '未能连接云端同步服务，请检查网络' };
   } catch (err: any) {
     console.error('[SyncService] Cloud backup error:', err);
     return { success: false, message: err?.message || '网络连接异常' };
@@ -224,7 +263,7 @@ export async function restoreFavoritesFromCloud(): Promise<{
   const serverUrl = getSyncServerUrl();
 
   try {
-    // 1. 若配置了自定义云端同步服务器
+    // 1. 若配置了自定义云端同步服务器，优先拉取
     if (serverUrl) {
       try {
         const resp = await universalFetch(
@@ -238,19 +277,16 @@ export async function restoreFavoritesFromCloud(): Promise<{
           }
         );
         if (resp.ok) {
-          const data = await resp.json();
-          if (data.success && data.favorites) {
+          const data = await resp.json().catch(() => null);
+          if (data && data.success && data.favorites) {
             const fav = data.favorites;
-            const songs = Array.isArray(fav.songs) ? fav.songs : [];
+            const songs = Array.isArray(fav.songs) ? fav.songs.map(sanitizeFavoriteSong) : [];
             const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
             const artists = Array.isArray(fav.artists) ? fav.artists : [];
             if (data.updatedAt) setLastSyncTime(data.updatedAt);
-            return {
-              songs,
-              playlists,
-              artists,
-              updatedAt: data.updatedAt || 0,
-            };
+            if (songs.length > 0 || playlists.length > 0 || artists.length > 0) {
+              return { songs, playlists, artists, updatedAt: data.updatedAt || 0 };
+            }
           }
         }
       } catch (custErr) {
@@ -258,7 +294,37 @@ export async function restoreFavoritesFromCloud(): Promise<{
       }
     }
 
-    // 2. 默认开箱即用公网极速同步通道
+    // 2. 默认开箱即用的 Cloudflare KV 永久持久化中继通道（无 TTL 限制，支持永久读取）
+    try {
+      const kvResp = await universalFetch(
+        `${DEFAULT_KV_RELAY_URL}/api/sync?action=restore&syncCode=${encodeURIComponent(syncCode)}&deviceId=${encodeURIComponent(deviceId)}`,
+        {
+          method: 'GET',
+          headers: {
+            'X-Device-Id': deviceId,
+            'X-Sync-Code': syncCode,
+          },
+        }
+      );
+      if (kvResp.ok) {
+        const data = await kvResp.json().catch(() => null);
+        if (data && data.success && data.favorites) {
+          const fav = data.favorites;
+          const songs = Array.isArray(fav.songs) ? fav.songs.map(sanitizeFavoriteSong) : [];
+          const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
+          const artists = Array.isArray(fav.artists) ? fav.artists : [];
+          const updatedAt = data.updatedAt || data.exportedAt || 0;
+          if (updatedAt) setLastSyncTime(updatedAt);
+          if (songs.length > 0 || playlists.length > 0 || artists.length > 0) {
+            return { songs, playlists, artists, updatedAt };
+          }
+        }
+      }
+    } catch (kvErr) {
+      console.warn('Permanent KV relay restore warning:', kvErr);
+    }
+
+    // 3. 冗余公共中继通道（保留中划线，作为双通道兜底）
     const path = getSafeSyncPath(syncCode);
     const resp = await universalFetch(`https://cl1p.net/${path}`, {
       headers: {
@@ -283,25 +349,25 @@ export async function restoreFavoritesFromCloud(): Promise<{
           .replace(/&amp;/g, '&')
           .trim();
 
-        if (!rawContent || rawContent === '{}') return null;
-
-        try {
-          const parsed = JSON.parse(rawContent);
-          const fav = parsed.favorites || parsed;
-          const rawSongs = Array.isArray(fav.songs) ? fav.songs : [];
-          const songs = rawSongs.map(sanitizeFavoriteSong);
-          const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
-          const artists = Array.isArray(fav.artists) ? fav.artists : [];
-          const updatedAt = parsed.exportedAt || parsed.updatedAt || 0;
-          if (updatedAt) setLastSyncTime(updatedAt);
-          return {
-            songs,
-            playlists,
-            artists,
-            updatedAt,
-          };
-        } catch (jsonErr) {
-          console.warn('[SyncService] Parse cloud json warning:', jsonErr);
+        if (rawContent && rawContent !== '{}') {
+          try {
+            const parsed = JSON.parse(rawContent);
+            const fav = parsed.favorites || parsed;
+            const rawSongs = Array.isArray(fav.songs) ? fav.songs : [];
+            const songs = rawSongs.map(sanitizeFavoriteSong);
+            const playlists = Array.isArray(fav.playlists) ? fav.playlists : [];
+            const artists = Array.isArray(fav.artists) ? fav.artists : [];
+            const updatedAt = parsed.exportedAt || parsed.updatedAt || 0;
+            if (updatedAt) setLastSyncTime(updatedAt);
+            return {
+              songs,
+              playlists,
+              artists,
+              updatedAt,
+            };
+          } catch (jsonErr) {
+            console.warn('[SyncService] Parse cloud json warning:', jsonErr);
+          }
         }
       }
     }
