@@ -27,8 +27,8 @@ export function generateRandomSyncCode(): string {
 }
 
 export const DEFAULT_SYNC_CODE = 'SKY-0608';
-/** 默认基于 Cloudflare Workers KV 的永久云端同步中继网关（用户专属长效永久存储） */
-export const DEFAULT_KV_RELAY_URL = 'https://mp3tao-sync.laihui126cn.workers.dev';
+/** 默认基于 Vercel 代理 → Cloudflare KV 的永久云端同步中继网关（国内直连，永久存储） */
+export const DEFAULT_KV_RELAY_URL = 'https://mp-3-freer2.vercel.app/cloudsync';
 const DEVICE_ID_KEY = 'mp3tao_device_id';
 const LAST_SYNC_TIME_KEY = 'mp3tao_last_sync_time';
 

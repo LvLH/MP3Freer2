@@ -4,6 +4,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/cloudsync/:path*",
+      "destination": "https://mp3tao-sync.laihui126cn.workers.dev/:path*"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
