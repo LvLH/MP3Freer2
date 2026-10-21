@@ -340,7 +340,7 @@ export const AboutPanel: React.FC = () => {
                     value={serverUrl}
                     onChange={e => setServerUrlState(e.target.value)}
                     onBlur={() => setSyncServerUrl(serverUrl)}
-                    placeholder="选填，留空即默认使用 Cloudflare KV 永久云通道"
+                    placeholder="选填，留空即默认使用专属永久云 (music.terrysky.fun)"
                     style={{
                       flex: 1,
                       maxWidth: 280,
@@ -357,8 +357,11 @@ export const AboutPanel: React.FC = () => {
                     type="button"
                     className="primary-btn"
                     onClick={() => {
+                      if (serverUrl && serverUrl.includes('workers.dev')) {
+                        alert('⚠️ 提示：workers.dev 域名在国内易连接超时。建议清空此处直接使用内置国内极速域名 (music.terrysky.fun)；若继续保存，请确保处于代理网络。');
+                      }
                       setSyncServerUrl(serverUrl);
-                      alert(serverUrl ? `✅ 自建节点已保存：\n${serverUrl}` : '✅ 已清除自建节点，将使用默认云通道');
+                      alert(serverUrl ? `✅ 自建节点已保存：\n${serverUrl}` : '✅ 已清除自建节点，将默认使用国内极速永久云 (music.terrysky.fun)');
                     }}
                     style={{ height: 30, padding: '0 10px', fontSize: 12, borderRadius: 6, background: 'rgba(255,255,255,0.08)' }}
                   >

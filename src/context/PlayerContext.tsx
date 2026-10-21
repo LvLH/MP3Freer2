@@ -43,6 +43,7 @@ import {
   getSyncCode,
   setSyncCode,
   mergeFavoritesData,
+  getSyncEndpointDescription,
 } from '../services/syncService';
 import type {
   Song,
@@ -1525,6 +1526,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const syncFavoritesNow = async () => {
     try {
       const currentCode = getSyncCode();
+      const endpoint = getSyncEndpointDescription();
+      toast.info(`正在同步到 ${endpoint.name} (暗号: ${currentCode})...`);
       const cloudData = await restoreFavoritesFromCloud();
       const hasCloudData = !!(cloudData && ((cloudData.songs && cloudData.songs.length > 0) || (cloudData.playlists && cloudData.playlists.length > 0) || (cloudData.artists && cloudData.artists.length > 0)));
       const hasLocalData = favoriteSongs.length > 0 || favoritePlaylists.length > 0 || favoriteArtists.length > 0;
@@ -1549,7 +1552,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (merged.songs.length > 0 || merged.playlists.length > 0 || merged.artists.length > 0) {
           await backupFavoritesToCloud(merged);
         }
-        toast.success(`同步成功！当前收藏 ${merged.songs.length} 首歌曲，${merged.playlists.length} 个歌单，${merged.artists.length} 位歌手`);
+        const syncSrc = cloudData?.source || endpoint.host;
+        toast.success(`同步成功 (${syncSrc})！当前收藏 ${merged.songs.length} 首歌曲，${merged.playlists.length} 个歌单`);
       } else if (hasLocalData) {
         // 云端暂无，上传本地有效收藏
         const backupRes = await backupFavoritesToCloud({
@@ -1558,7 +1562,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           artists: favoriteArtists,
         });
         if (backupRes.success) {
-          toast.success(`已将本地 ${favoriteSongs.length} 首收藏备份至云端【${currentCode}】`);
+          const syncDst = backupRes.target || endpoint.host;
+          toast.success(`已备份至云端 (${syncDst})【${currentCode}】`);
         } else {
           toast.warning(`未能连接云端同步服务: ${backupRes.message || '请检查网络'}`);
         }
@@ -1576,10 +1581,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const uploadFavoritesNow = async () => {
     try {
       const currentCode = getSyncCode();
+      const endpoint = getSyncEndpointDescription();
       if (favoriteSongs.length === 0 && favoritePlaylists.length === 0 && favoriteArtists.length === 0) {
         toast.warning('本地当前没有收藏任何内容，无需上传备份');
         return;
       }
+      toast.info(`正在备份到 ${endpoint.name} (暗号: ${currentCode})...`);
       const backupRes = await backupFavoritesToCloud({
         songs: favoriteSongs,
         playlists: favoritePlaylists,
@@ -1599,6 +1606,8 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const restoreFavoritesNow = async () => {
     try {
       const currentCode = getSyncCode();
+      const endpoint = getSyncEndpointDescription();
+      toast.info(`正在从 ${endpoint.name} 拉取云端收藏 (暗号: ${currentCode})...`);
       const cloudData = await restoreFavoritesFromCloud();
       if (cloudData && ((cloudData.songs && cloudData.songs.length > 0) || (cloudData.playlists && cloudData.playlists.length > 0) || (cloudData.artists && cloudData.artists.length > 0))) {
         const merged = mergeFavoritesData(
