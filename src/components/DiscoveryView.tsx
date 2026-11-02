@@ -7,11 +7,19 @@ import {
   ToplistDetail,
 } from '../services/musicApi';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Music, Flame, Mic2, Compass, Disc, Loader2 } from 'lucide-react';
+import { Play, Music, Flame, Mic2, Compass, Disc, Loader2, ArrowLeft } from 'lucide-react';
 import { toPlayerSong } from '../utils/songUtils';
 import { CoverImage } from './CoverImage';
 
 const DISCOVERY_TTL_MS = 15 * 60 * 1000;
+
+const ARTIST_AREAS = [
+  { label: '全部', value: -1 },
+  { label: '华语', value: 7 },
+  { label: '欧美', value: 96 },
+  { label: '日本', value: 8 },
+  { label: '韩国', value: 16 },
+];
 
 const GENRE_LIST = [
   { name: '流行', icon: '🎧', color: 'rgba(168, 85, 247, 0.16)' },
@@ -41,6 +49,12 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
+  // 热门歌手二级视图状态
+  const [showAllArtists, setShowAllArtists] = useState<boolean>(false);
+  const [artistArea, setArtistArea] = useState<number>(-1);
+  const [fullArtists, setFullArtists] = useState<any[]>([]);
+  const [artistsLoading, setArtistsLoading] = useState<boolean>(false);
+
   const fetchedRef = useRef(false);
   const lastFetchedAtRef = useRef(0);
   const genreCacheRef = useRef<Record<string, OnlinePlaylist[]>>({});
@@ -62,6 +76,30 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
       setGenreLoading(false);
     }
   }, []);
+
+  const loadArtistList = useCallback(async (area: number) => {
+    setArtistsLoading(true);
+    try {
+      const list = await MusicApiService.getArtistList({ area, limit: 60 });
+      setFullArtists(list || []);
+    } catch (e) {
+      console.error('Failed to load artist list:', e);
+    } finally {
+      setArtistsLoading(false);
+    }
+  }, []);
+
+  const handleOpenAllArtists = () => {
+    setShowAllArtists(true);
+    if (fullArtists.length === 0) {
+      void loadArtistList(artistArea);
+    }
+  };
+
+  const handleAreaChange = (area: number) => {
+    setArtistArea(area);
+    void loadArtistList(area);
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -154,6 +192,72 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
     );
   }
 
+  if (showAllArtists) {
+    return (
+      <div className="discovery-view-root" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '12px 0', animation: 'fadeIn 0.3s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              className="back-btn"
+              onClick={() => setShowAllArtists(false)}
+              title="返回发现页"
+              style={{ width: 34, height: 34 }}
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Mic2 size={20} style={{ color: '#10b981' }} />
+              <h2 style={{ fontSize: 18, margin: 0 }}>热门歌手</h2>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {ARTIST_AREAS.map(a => (
+              <button
+                key={a.value}
+                type="button"
+                className={`source-tab ${artistArea === a.value ? 'active' : ''}`}
+                onClick={() => handleAreaChange(a.value)}
+                style={{ padding: '4px 12px', fontSize: 12, borderRadius: 16 }}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {artistsLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px 0', color: 'var(--text-muted)', gap: 8 }}>
+            <Loader2 size={20} className="animate-spin" />
+            <span>正在加载歌手列表...</span>
+          </div>
+        ) : (
+          <div className="playlist-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 16 }}>
+            {fullArtists.map(artist => (
+              <div
+                key={artist.id}
+                className="playlist-card"
+                onClick={() => window.dispatchEvent(new CustomEvent('globalSearch', { detail: artist.name }))}
+                style={{ textAlign: 'center', cursor: 'pointer' }}
+              >
+                <div className="playlist-cover-wrapper" style={{ borderRadius: '50%', aspectRatio: '1/1', overflow: 'hidden' }}>
+                  <CoverImage src={artist.picUrl} alt={artist.name} className="playlist-card-cover" style={{ objectFit: 'cover' }} />
+                </div>
+                <span className="playlist-card-name" style={{ marginTop: 8, display: 'block', width: '100%', fontSize: 13 }} title={artist.name}>
+                  {artist.name}
+                </span>
+                {artist.musicSize ? (
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{artist.musicSize} 首单曲</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className="discovery-view-root"
@@ -176,7 +280,6 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
                   </div>
                 </div>
                 <div className="toplist-info">
-                  <h4 className="toplist-name">{tl.name}</h4>
                   <div className="toplist-tracks">
                     {tl.topTracks?.map((track, idx) => (
                       <div key={idx} className="toplist-track-item">
@@ -193,12 +296,23 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
         </section>
       )}
 
-      {/* 2. 歌手模块 */}
+      {/* 2. 热门歌手模块 */}
       {topArtists.length > 0 && (
         <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Mic2 size={19} style={{ color: '#10b981' }} />
-            <h2 style={{ fontSize: 17, margin: 0 }}>歌手</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Mic2 size={19} style={{ color: '#10b981' }} />
+              <h2 style={{ fontSize: 17, margin: 0 }}>热门歌手</h2>
+            </div>
+            <button
+              type="button"
+              className="discovery-more-btn"
+              onClick={handleOpenAllArtists}
+              title="查看全部热门歌手"
+            >
+              <span>更多</span>
+              <span>&gt;&gt;</span>
+            </button>
           </div>
           <div className="playlist-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))' }}>
             {topArtists.map(artist => (

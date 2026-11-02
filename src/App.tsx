@@ -13,7 +13,6 @@ import { AboutPanel } from './components/AboutPanel';
 import { ShortcutHelpModal } from './components/ShortcutHelpModal';
 import { HistoryPanel } from './components/HistoryPanel';
 import { YearlyReport } from './components/YearlyReport';
-import { SmartPlaylistsPanel } from './components/SmartPlaylistsPanel';
 import { MyMusicMobilePanel } from './components/MyMusicMobilePanel';
 import { useShortcuts } from './hooks/useShortcuts';
 import { isAndroid } from './utils/platform';
@@ -118,7 +117,6 @@ function MainLayout() {
           <MyMusicMobilePanel onOpenReport={() => setIsReportOpen(true)} />
         </div>
         <div style={{ display: panelDisplay('local', activeTab), height: '100%' }}><LocalMusicPanel /></div>
-        <div style={{ display: panelDisplay('smart', activeTab), height: '100%' }}><SmartPlaylistsPanel /></div>
         <div style={{ display: panelDisplay('playlist', activeTab), height: '100%' }}><PlaylistPanel /></div>
         <div style={{ display: panelDisplay('favorites', activeTab), height: '100%' }}><FavoritePanel /></div>
         <div style={{ display: panelDisplay('history', activeTab), height: '100%' }}><HistoryPanel /></div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History, BarChart3, Sparkles, Compass } from 'lucide-react';
+import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History, BarChart3, Sparkles } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
@@ -15,7 +15,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
     { id: 'recommend', name: '为你推荐', icon: Sparkles },
     { id: 'search', name: '音乐搜索', icon: Search },
     { id: 'playlist', name: '正在播放', icon: ListMusic },
-    { id: 'smart', name: '智能歌单', icon: Compass },
     { id: 'local', name: '本地歌曲', icon: Music },
     { id: 'history', name: '最近播放', icon: History },
     { id: 'favorites', name: '我的收藏', icon: Heart },

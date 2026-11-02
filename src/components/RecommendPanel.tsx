@@ -16,6 +16,7 @@ import { MusicApiService, OnlinePlaylist, OnlineSong, PlaylistDetail } from '../
 import { usePlayer } from '../context/PlayerContext';
 import { useToast } from '../context/ToastContext';
 import { toPlayerSong, isSameSong } from '../utils/songUtils';
+import { computeReportStats } from '../utils/reportStats';
 import { MUSIC_SOURCES } from '../settings';
 import { CoverImage } from './CoverImage';
 import type { Song } from '../types/music';
@@ -80,33 +81,6 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
   } = usePlayer();
   const toast = useToast();
 
-  // 提取用户最近听过/收藏的候选种子歌曲（最多取 8 首不同歌曲）
-  const seedCandidates = useMemo<Song[]>(() => {
-    const seen = new Set<string>();
-    const list: Song[] = [];
-    for (const entry of playHistory) {
-      const s = entry.song;
-      const key = `${s.name.toLowerCase()}|${s.artist.toLowerCase()}`;
-      if (!seen.has(key) && s.name && s.name !== '未知歌曲') {
-        seen.add(key);
-        list.push(s);
-      }
-      if (list.length >= 6) break;
-    }
-    for (const s of favoriteSongs) {
-      if (list.length >= 8) break;
-      const key = `${s.name.toLowerCase()}|${s.artist.toLowerCase()}`;
-      if (!seen.has(key) && s.name && s.name !== '未知歌曲') {
-        seen.add(key);
-        list.push(s);
-      }
-    }
-    return list;
-  }, [playHistory, favoriteSongs]);
-
-  const [selectedSeedIdx, setSelectedSeedIdx] = useState<number>(0);
-  const activeSeedSong: Song | null = seedCandidates[selectedSeedIdx] || seedCandidates[0] || null;
-
   const [dailySongs, setDailySongs] = useState<OnlineSong[]>([]);
   const [simiSongs, setSimiSongs] = useState<OnlineSong[]>([]);
   const [simiLoading, setSimiLoading] = useState<boolean>(false);
@@ -114,6 +88,45 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
   const [playlistPool, setPlaylistPool] = useState<OnlinePlaylist[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [detailLoading, setDetailLoading] = useState<boolean>(false);
+
+  // 懒加载控制：初始展示 8 首，上滑触底增加
+  const [visibleCount, setVisibleCount] = useState<number>(8);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+
+  // 基于听歌年报最爱歌曲（不随单次听歌频繁切换，仅在收藏列表变化或初次加载时更新）
+  const [reportTopSongs, setReportTopSongs] = useState<Song[]>(() => {
+    const report = computeReportStats(playHistory);
+    if (report.topSongs.length > 0) {
+      return report.topSongs.map(t => t.song);
+    }
+    return favoriteSongs.slice(0, 10);
+  });
+
+  const prevFavLengthRef = useRef(favoriteSongs.length);
+  useEffect(() => {
+    if (favoriteSongs.length !== prevFavLengthRef.current) {
+      prevFavLengthRef.current = favoriteSongs.length;
+      const report = computeReportStats(playHistory);
+      const newTop = report.topSongs.length > 0
+        ? report.topSongs.map(t => t.song)
+        : favoriteSongs.slice(0, 10);
+      setReportTopSongs(newTop);
+    }
+  }, [favoriteSongs, playHistory]);
+
+  // 基准歌曲候选池：最爱歌曲前 3 首做基准
+  const baseCandidates = useMemo(() => reportTopSongs.slice(0, 3), [reportTopSongs]);
+  // 切换基准歌曲候选：最爱歌曲第 4~6 首（不足则为空）
+  const switchCandidates = useMemo(() => reportTopSongs.slice(3, 6), [reportTopSongs]);
+
+  // 当前激活的基准歌曲（默认取前 3 首里的第一首）
+  const [activeSeedSong, setActiveSeedSong] = useState<Song | null>(() => baseCandidates[0] || reportTopSongs[0] || null);
+
+  useEffect(() => {
+    if (!activeSeedSong && reportTopSongs.length > 0) {
+      setActiveSeedSong(reportTopSongs[0]);
+    }
+  }, [reportTopSongs, activeSeedSong]);
 
   // 二级详情视图：可以是 'daily'（今日推荐列表）、'radar'（相似漫游列表）或某个具体歌单 PlaylistDetail
   const [detailView, setDetailView] = useState<
@@ -135,12 +148,13 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
     return { month, day, weekday: weekdays[now.getDay()] };
   }, []);
 
-  // 拉取特定种子歌曲的相似歌曲
+  // 拉取特定种子歌曲的相似歌曲（一次拉取 24 首，用于分页懒加载）
   const fetchSimiForSeed = useCallback(async (seed: Song | null) => {
     if (!seed) return;
     setSimiLoading(true);
+    setVisibleCount(8);
     try {
-      const songs = await MusicApiService.getSimiSongs(seed, 12);
+      const songs = await MusicApiService.getSimiSongs(seed, 24);
       if (songs.length > 0) {
         setSimiSongs(dedupeOnlineSongs(songs));
       }
@@ -151,6 +165,11 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
     }
   }, []);
 
+  const handleSelectSeed = (seed: Song) => {
+    setActiveSeedSong(seed);
+    void fetchSimiForSeed(seed);
+  };
+
   // 初始化或刷新推荐数据
   const loadRecommendData = useCallback(
     async (force: boolean = false) => {
@@ -160,17 +179,17 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
       }
       setLoading(true);
       try {
-        const seeds = seedCandidates.slice(0, 2);
+        const seeds = baseCandidates.slice(0, 2);
         const [newSongsRes, personalPlRes, hqPlRes, simiSongs1, simiSongs2, simiPl1] = await Promise.all([
           MusicApiService.getNewSongs().catch(() => [] as OnlineSong[]),
           MusicApiService.getPersonalizedPlaylists(16).catch(() => [] as OnlinePlaylist[]),
           MusicApiService.getNeteaseHighQualityPlaylists({ limit: 24 }).catch(() => ({ playlists: [] as OnlinePlaylist[] })),
-          seeds[0] ? MusicApiService.getSimiSongs(seeds[0], 15).catch(() => [] as OnlineSong[]) : Promise.resolve([] as OnlineSong[]),
-          seeds[1] ? MusicApiService.getSimiSongs(seeds[1], 10).catch(() => [] as OnlineSong[]) : Promise.resolve([] as OnlineSong[]),
+          seeds[0] ? MusicApiService.getSimiSongs(seeds[0], 24).catch(() => [] as OnlineSong[]) : Promise.resolve([] as OnlineSong[]),
+          seeds[1] ? MusicApiService.getSimiSongs(seeds[1], 15).catch(() => [] as OnlineSong[]) : Promise.resolve([] as OnlineSong[]),
           seeds[0] ? MusicApiService.getSimiPlaylists(seeds[0], 6).catch(() => [] as OnlinePlaylist[]) : Promise.resolve([] as OnlinePlaylist[]),
         ]);
 
-        // 1. 组装「今日推荐」歌曲列表（优先结合用户的相似推荐 + 最新热门单曲，若不够再从精选歌单补齐至 30 首）
+        // 1. 组装「今日推荐」歌曲列表
         let combinedDaily = dedupeOnlineSongs([...simiSongs1, ...simiSongs2, ...newSongsRes]);
         if (combinedDaily.length < 20 && (personalPlRes.length > 0 || hqPlRes.playlists.length > 0)) {
           const topPl = personalPlRes[0] || hqPlRes.playlists[0];
@@ -183,14 +202,14 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
         }
         setDailySongs(combinedDaily.slice(0, 30));
 
-        // 2. 设置「相似歌曲推荐」
+        // 2. 设置「可能你还喜欢」推荐池
         if (simiSongs1.length > 0) {
-          setSimiSongs(dedupeOnlineSongs(simiSongs1).slice(0, 10));
+          setSimiSongs(dedupeOnlineSongs(simiSongs1));
         } else {
-          setSimiSongs(combinedDaily.slice(0, 10));
+          setSimiSongs(combinedDaily);
         }
 
-        // 3. 组装「为你精选的歌单」（相似歌单 + 官方精选 + 精品歌单）
+        // 3. 组装「为你精选的歌单」
         const mergedPlaylists = dedupePlaylists([
           ...simiPl1,
           ...personalPlRes,
@@ -205,8 +224,24 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
         setLoading(false);
       }
     },
-    [seedCandidates]
+    [baseCandidates]
   );
+
+  // 滚动触底懒加载
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (distanceToBottom < 160 && !loadingMore && !simiLoading) {
+      const totalAvailable = simiSongs.length > 0 ? simiSongs.length : dailySongs.length;
+      if (visibleCount < totalAvailable) {
+        setLoadingMore(true);
+        setTimeout(() => {
+          setVisibleCount(prev => Math.min(prev + 8, totalAvailable));
+          setLoadingMore(false);
+        }, 200);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -289,16 +324,47 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
                 {song.has_hires && <span className="tag-hires">Hi-Res</span>}
                 <span className="tag-source">{sourceName(song.source)}</span>
               </div>
-              <span
-                className="song-artist clickable-artist"
-                onClick={e => {
-                  e.stopPropagation();
-                  window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
-                }}
-                title={`搜索歌手: ${song.artist}`}
-              >
-                {song.artist}
-              </span>
+              <div className="song-subtitle-row" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginTop: 2, flexWrap: 'wrap' }}>
+                <span
+                  className="song-artist clickable-artist"
+                  onClick={e => {
+                    e.stopPropagation();
+                    window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
+                  }}
+                  title={`搜索歌手: ${song.artist}`}
+                >
+                  {song.artist || '未知歌手'}
+                </span>
+                {song.album && song.album !== '未知专辑' && song.album !== '-' && (
+                  <span
+                    className="clickable-artist song-album-inline"
+                    onClick={e => {
+                      e.stopPropagation();
+                      window.dispatchEvent(
+                        new CustomEvent('openAlbum', {
+                          detail: {
+                            albumId: song.albumId,
+                            albumName: song.album,
+                            artistName: song.artist,
+                            source: song.source,
+                          },
+                        })
+                      );
+                    }}
+                    style={{
+                      maxWidth: 160,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                    }}
+                    title={`查看专辑: ${song.album}`}
+                  >
+                    · {song.album}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="song-col-album">
               {song.album && song.album !== '未知专辑' && song.album !== '-' ? (
@@ -440,6 +506,7 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
   return (
     <div
       ref={scrollRef}
+      onScroll={handleScroll}
       className="recommend-panel-root"
       style={{ width: '100%', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 22 }}
     >
@@ -631,20 +698,26 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
         )}
       </section>
 
-      {/* 3. 根据你听过的歌 · 相似歌曲推荐 */}
-      <section style={{ paddingBottom: 16 }}>
+      {/* 3. 可能你还喜欢 · 推荐歌曲 */}
+      <section style={{ paddingBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Music size={18} style={{ color: '#10b981' }} />
-            <h3 style={{ fontSize: 16, margin: 0, fontWeight: 600 }}>
-              {activeSeedSong ? `因为你听过《${activeSeedSong.name}》` : '相似好歌推荐'}
-            </h3>
+            <h3 style={{ fontSize: 16, margin: 0, fontWeight: 600 }}>可能你还喜欢</h3>
+            {activeSeedSong && (
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                基于《{activeSeedSong.name}》
+              </span>
+            )}
           </div>
-          {simiSongs.length > 0 && (
+          {(simiSongs.length > 0 || dailySongs.length > 0) && (
             <button
               type="button"
               className="primary-btn"
-              onClick={() => playAll(simiSongs.map(toPlayerSong))}
+              onClick={() => {
+                const list = (simiSongs.length > 0 ? simiSongs : dailySongs).slice(0, visibleCount);
+                playAll(list.map(toPlayerSong));
+              }}
               style={{ height: 28, padding: '0 12px', borderRadius: 14, fontSize: 12, gap: 4 }}
             >
               <Play size={12} fill="currentColor" />
@@ -653,20 +726,17 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
           )}
         </div>
 
-        {/* 候选已听歌曲种子胶囊：点击任意一首听过的歌，即可实时获取它的相似歌曲 */}
-        {seedCandidates.length > 1 && (
+        {/* 切换基准歌曲：展示年报中最爱歌曲的第 4-6 首，如无则无需展示 */}
+        {switchCandidates.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
             <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>切换基准歌曲:</span>
-            {seedCandidates.map((seed, idx) => {
-              const isSelected = idx === selectedSeedIdx;
+            {switchCandidates.map((seed, idx) => {
+              const isSelected = activeSeedSong?.id === seed.id;
               return (
                 <button
                   key={`${seed.id}_${idx}`}
                   type="button"
-                  onClick={() => {
-                    setSelectedSeedIdx(idx);
-                    void fetchSimiForSeed(seed);
-                  }}
+                  onClick={() => handleSelectSeed(seed)}
                   style={{
                     padding: '4px 10px',
                     borderRadius: 14,
@@ -689,10 +759,39 @@ export const RecommendPanel: React.FC<{ active?: boolean }> = ({ active = true }
         {simiLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 0', color: 'var(--text-muted)', fontSize: 13 }}>
             <Loader2 size={16} className="animate-spin" />
-            <span>正在根据《{activeSeedSong?.name}》分析相似歌曲...</span>
+            <span>正在根据《{activeSeedSong?.name}》分析推荐歌曲...</span>
           </div>
         ) : (
-          renderSongList(simiSongs.length > 0 ? simiSongs : dailySongs.slice(0, 10))
+          <>
+            {renderSongList((simiSongs.length > 0 ? simiSongs : dailySongs).slice(0, visibleCount))}
+            {(simiSongs.length > 0 ? simiSongs : dailySongs).length > visibleCount && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '14px 0',
+                  color: 'var(--text-muted)',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  const total = (simiSongs.length > 0 ? simiSongs : dailySongs).length;
+                  setVisibleCount(prev => Math.min(prev + 8, total));
+                }}
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>正在加载更多...</span>
+                  </>
+                ) : (
+                  <span>向上滑动自动加载更多推荐（已展示 {Math.min(visibleCount, (simiSongs.length > 0 ? simiSongs : dailySongs).length)} / {(simiSongs.length > 0 ? simiSongs : dailySongs).length}）</span>
+                )}
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

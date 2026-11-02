@@ -1,4 +1,4 @@
-﻿import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 const isTauri = typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__ !== undefined;
 
@@ -47,6 +47,15 @@ export interface ToplistDetail extends OnlinePlaylist {
     first: string;
     second: string;
   }[];
+}
+
+export interface HotSearchItem {
+  searchWord: string;
+  score?: number;
+  content?: string;
+  source?: number;
+  iconType?: number;
+  iconUrl?: string;
 }
 
 export interface PlaylistDetail extends OnlinePlaylist {
@@ -156,15 +165,52 @@ export function resolveImageUrl(...args: any[]): string | null {
 }
 
 function mapOnlineSong(item: any, fallbackSource: string): OnlineSong {
-  const arNames = Array.isArray(item.ar) ? item.ar.map((ar: any) => ar.name).join(', ') : '';
+  // 1. 歌手名解析：兼容 item.ar、item.artists（网易云常见）、item.artist（数组或字符串）、item.singer / item.singers
+  const arList = Array.isArray(item.ar)
+    ? item.ar
+    : Array.isArray(item.artists)
+    ? item.artists
+    : Array.isArray(item.singers)
+    ? item.singers
+    : null;
+  const arNames = arList
+    ? arList.map((a: any) => (typeof a === 'string' ? a : a?.name || '')).filter(Boolean).join(', ')
+    : '';
+
   const artist = Array.isArray(item.artist)
     ? item.artist.join(', ')
-    : firstString(item.artist, arNames, item.singer, '未知歌手');
-  const album = firstString(item.album, item.al?.name, item.albumName, '未知专辑');
-  // 专辑 id：网易接口放在 album.id / al.id；第三方接口通常无，置空表示无法进专辑
-  const rawAlbumId = item.album?.id ?? item.al?.id ?? item.albumId ?? item.album_id ?? null;
+    : firstString(
+        arNames,
+        typeof item.artist === 'string' ? item.artist : '',
+        typeof item.singer === 'string' ? item.singer : '',
+        '未知歌手'
+      );
+
+  // 2. 专辑名解析：兼容 item.album（可能是对象 { name, id } 或字符串）、item.al?.name、item.albumName
+  const albumObjName = typeof item.album === 'object' && item.album !== null ? item.album.name : undefined;
+  const albumStr = typeof item.album === 'string' ? item.album : undefined;
+  const album = firstString(
+    albumObjName,
+    albumStr,
+    item.al?.name,
+    item.albumName,
+    '未知专辑'
+  );
+
+  // 3. 专辑 ID 解析：网易云接口放在 album.id / al.id / albumId / album_id
+  const rawAlbumId =
+    item.album?.id ??
+    item.al?.id ??
+    item.albumId ??
+    item.album_id ??
+    null;
   const albumId = rawAlbumId != null ? String(rawAlbumId) : undefined;
-  const duration = Number(item.extra_data?.duration || item.duration || (item.dt ? Math.floor(Number(item.dt) / 1000) : 0));
+
+  const duration = Number(
+    item.extra_data?.duration ||
+    item.duration ||
+    (item.dt ? Math.floor(Number(item.dt) / 1000) : 0)
+  );
 
   return {
     id: String(item.id),
@@ -176,7 +222,14 @@ function mapOnlineSong(item: any, fallbackSource: string): OnlineSong {
     url_id: String(item.url_id || item.id),
     pic_id: String(item.pic_id || item.al?.pic || item.id || ''),
     lyric_id: String(item.lyric_id || item.id),
-    pic: resolveImageUrl(item.pic, item.picUrl, item.al?.picUrl, item.album?.picUrl, item.cover) || null,
+    pic: resolveImageUrl(
+      item.pic,
+      item.picUrl,
+      item.al?.picUrl,
+      item.album?.picUrl,
+      item.album?.blurPicUrl,
+      item.cover
+    ) || null,
     url: firstString(item.url) || null,
     duration,
     has_hires: !!(item.extra_data?.has_hires || (item.sq?.br && item.sq.br > 320000)),
@@ -1062,7 +1115,7 @@ export const MusicApiService = {
       const fetchOptions: any = {
         method: 'GET',
         headers: { 
-          'Referer': 'http://music.163.com',
+          'Referer': 'https://music.163.com',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       };
@@ -1074,7 +1127,7 @@ export const MusicApiService = {
       }
 
       if (Array.isArray(data.list)) {
-        return data.list.slice(0, 6).map((tl: any) => ({
+        const topLists: ToplistDetail[] = data.list.slice(0, 6).map((tl: any) => ({
           id: String(tl.id),
           name: tl.name,
           cover: resolveImageUrl(tl.coverImgUrl, tl.picUrl) || '',
@@ -1082,15 +1135,134 @@ export const MusicApiService = {
           creatorAvatar: '',
           playCount: tl.playCount,
           trackCount: tl.trackCount,
-          topTracks: Array.isArray(tl.tracks) ? tl.tracks.map((t: any) => ({
+          topTracks: Array.isArray(tl.tracks) && tl.tracks.length > 0 ? tl.tracks.map((t: any) => ({
             first: t.first,
             second: t.second
           })) : []
         }));
+
+        // 补全前 6 个榜单中 tracks 为空的榜单（如古典榜、电音榜等分榜）
+        await Promise.all(
+          topLists.map(async (tl) => {
+            if (tl.topTracks.length === 0) {
+              try {
+                const detail = await this.getPlaylistDetails(tl.id, true, 'netease');
+                if (detail && Array.isArray(detail.item) && detail.item.length > 0) {
+                  tl.topTracks = detail.item.slice(0, 3).map(song => ({
+                    first: song.name,
+                    second: song.artist
+                  }));
+                }
+              } catch (e) {
+                // 忽略单个补全失败
+              }
+            }
+          })
+        );
+
+        return topLists;
       }
     } catch (err: any) {
       console.warn('Failed to fetch Netease Toplists:', err);
       throw err;
+    }
+    return [];
+  },
+
+  /**
+   * 获取网易云热搜榜列表（优先尝试 hotsearchlist，回退 search/hot）
+   */
+  async getHotSearchList(): Promise<HotSearchItem[]> {
+    try {
+      const response = await universalFetch('https://music.163.com/api/hotsearchlist/get', {
+        method: 'GET',
+        headers: {
+          'Referer': 'https://music.163.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.code === 200 && Array.isArray(data.data) && data.data.length > 0) {
+          return data.data.slice(0, 20).map((item: any) => ({
+            searchWord: item.searchWord,
+            score: item.score,
+            content: item.content,
+            source: item.source,
+            iconType: item.iconType,
+            iconUrl: item.iconUrl
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch hotsearchlist/get, trying fallback:', e);
+    }
+
+    try {
+      const fallbackRes = await universalFetch('https://music.163.com/api/search/hot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Referer': 'https://music.163.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        body: 'type=1'
+      });
+      if (fallbackRes.ok) {
+        const fbData = await fallbackRes.json();
+        if (fbData.code === 200 && fbData.result && Array.isArray(fbData.result.hots)) {
+          return fbData.result.hots.slice(0, 20).map((h: any) => ({
+            searchWord: h.first
+          }));
+        }
+      }
+    } catch (fbErr) {
+      console.warn('Fallback search/hot failed:', fbErr);
+    }
+    return [];
+  },
+
+  /**
+   * 获取歌手完整分类列表（网易云歌手接口）
+   * @param area -1:全部, 7:华语, 96:欧美, 8:日本, 16:韩国, 0:其他
+   * @param type -1:全部, 1:男歌手, 2:女歌手, 3:乐队
+   */
+  async getArtistList(options: {
+    area?: number;
+    type?: number;
+    initial?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<any[]> {
+    const area = options.area ?? -1;
+    const type = options.type ?? -1;
+    const initial = options.initial ?? '-1';
+    const limit = options.limit ?? 60;
+    const offset = options.offset ?? 0;
+    try {
+      const response = await universalFetch('https://music.163.com/api/artist/list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Referer': 'https://music.163.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        body: `limit=${limit}&offset=${offset}&type=${type}&area=${area}&initial=${encodeURIComponent(initial)}`
+      });
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (data.code === 200 && Array.isArray(data.artists)) {
+        return data.artists.map((item: any) => ({
+          id: String(item.id),
+          name: item.name,
+          picUrl: resolveImageUrl(item.picUrl, item.img1v1Url) || '',
+          musicSize: item.musicSize,
+          albumSize: item.albumSize,
+          trans: item.trans || '',
+        }));
+      }
+    } catch (err) {
+      console.warn('Failed to fetch artist list:', err);
     }
     return [];
   },

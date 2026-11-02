@@ -1286,6 +1286,7 @@ body.is-android .mobile-lyric-corner-tools,
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  justify-content: center;
 }
 .toplist-name {
   margin: 0 0 10px 0;
@@ -3629,5 +3630,166 @@ body.is-desktop .mobile-playlist-sheet-overlay,
     gap: 4px;
   }
 }
+
+/* ============ 搜索引导专区：猜你喜欢 & 网易云热搜榜 ============ */
+.search-guide-container {
+  border-radius: 16px;
+}
+
+/* 猜你喜欢：2列 × 3行 网格（左右各3个） */
+.guess-likes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+}
+
+.guess-like-chip {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.guess-like-chip:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.guess-like-chip:active {
+  transform: scale(0.98);
+}
+
+.guess-like-text {
+  font-size: 13px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guide-refresh-btn:hover {
+  color: var(--primary-color) !important;
+}
+
+/* 热搜榜：单/双列自适应 */
+.hotsearch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px 16px;
+}
+
+.hotsearch-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hotsearch-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.hotsearch-rank {
+  width: 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.hotsearch-rank.top3 {
+  color: #ef4444;
+  font-weight: 800;
+}
+
+.hotsearch-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hotsearch-word-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hotsearch-word {
+  font-size: 13px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hotsearch-word.bold {
+  font-weight: 600;
+}
+
+.hotsearch-badge {
+  height: 12px;
+  width: auto;
+  object-fit: contain;
+}
+
+.hotsearch-content {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 热门歌手更多入口按钮 */
+.discovery-more-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.discovery-more-btn:hover {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+@media (max-width: 640px) {
+  .hotsearch-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+/* 歌曲副标题内联专辑名：在移动端呈现，桌面端使用独立专辑列 */
+.song-album-inline {
+  display: inline-block;
+}
+
+@media (min-width: 769px) {
+  .song-album-inline {
+    display: none !important;
+  }
+}
+
+
 
 

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp, X, Clock, Trash2 } from 'lucide-react';
-import { MusicApiService, OnlinePlaylist, OnlineSong, PlaylistDetail } from '../services/musicApi';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp, X, Clock, Trash2, Flame, Sparkles, RotateCw } from 'lucide-react';
+import { MusicApiService, OnlinePlaylist, OnlineSong, PlaylistDetail, HotSearchItem } from '../services/musicApi';
 import { usePlayer, FavoriteArtist } from '../context/PlayerContext';
 import { useToast } from '../context/ToastContext';
 import { getDefaultSearchSource, setDefaultSearchSource, MUSIC_SOURCES, MusicSource } from '../settings';
@@ -12,6 +12,19 @@ import { CoverImage } from './CoverImage';
 const PAGE_SIZE = 30;
 const SEARCH_HISTORY_KEY = 'mp3freer_search_history';
 const MAX_SEARCH_HISTORY = 12;
+
+const DEFAULT_GUESS_POOL = [
+  '周杰伦', '陈奕迅', '林俊杰', '薛之谦', '邓紫棋',
+  '王菲', '孙燕姿', '陶喆', '李荣浩', '五月天',
+  '晴天', '七里香', '起风了', '海阔天空', '平凡之路',
+  '稻香', '夜曲', '富士山下', '乌梅子酱', '孤勇者',
+  '江南', '小城夏天', '青花瓷', '后来', '想去海边'
+];
+
+function pickRandomWords(pool: string[], count: number = 6): string[] {
+  const shuffled = [...pool].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
+}
 
 const TEXT = {
   unknown: '\u672a\u77e5',
@@ -82,6 +95,43 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
   const [matchedArtist, setMatchedArtist] = useState<FavoriteArtist | null>(null);
   const [currentSource, setCurrentSource] = useState<MusicSource>(getDefaultSearchSource);
 
+  // 搜索引导相关状态（猜你喜欢 + 网易云热搜榜）
+  const [showSearchGuide, setShowSearchGuide] = useState<boolean>(false);
+  const [hotSearches, setHotSearches] = useState<HotSearchItem[]>([]);
+  const [guessLikes, setGuessLikes] = useState<string[]>(() => pickRandomWords(DEFAULT_GUESS_POOL, 6));
+  const [hotLoading, setHotLoading] = useState<boolean>(false);
+  const guessPoolRef = useRef<string[]>([...DEFAULT_GUESS_POOL]);
+
+  const refreshGuessLikes = useCallback(() => {
+    setGuessLikes(pickRandomWords(guessPoolRef.current, 6));
+  }, []);
+
+  // 加载网易云热搜榜
+  useEffect(() => {
+    let cancelled = false;
+    const fetchHot = async () => {
+      setHotLoading(true);
+      try {
+        const list = await MusicApiService.getHotSearchList();
+        if (!cancelled && list && list.length > 0) {
+          setHotSearches(list);
+          const words = list.map(item => item.searchWord).filter(Boolean);
+          const mergedPool = Array.from(new Set([...words, ...guessPoolRef.current]));
+          guessPoolRef.current = mergedPool;
+          setGuessLikes(pickRandomWords(mergedPool, 6));
+        }
+      } catch (err) {
+        console.warn('Load hot searches error:', err);
+      } finally {
+        if (!cancelled) setHotLoading(false);
+      }
+    };
+    void fetchHot();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const loadingMoreRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +182,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
       if (!term) return;
       saveSearchTerm(term);
       setKeyword(term);
+      setShowSearchGuide(false);
       setSearchType('track');
       setLoading(true);
       setSelectedPlaylist(null);
@@ -293,6 +344,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
 
     saveSearchTerm(term);
     setKeyword(term);
+    setShowSearchGuide(false);
     setLoading(true);
     setSelectedPlaylist(null);
     setActiveKeyword(term);
@@ -542,6 +594,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                 className="input-field"
                 placeholder={TEXT.searchPlaceholder}
                 value={keyword}
+                onFocus={() => setShowSearchGuide(true)}
                 onChange={(e) => {
                   const val = e.target.value;
                   setKeyword(val);
@@ -897,8 +950,125 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
               </div>
             )}
             
+            {/* 搜索引导模块（点击输入框展示：猜你喜欢左右各3个 + 热搜榜） */}
+            {showSearchGuide && !activeKeyword && !selectedPlaylist && (
+              <div className="search-guide-container glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 20, animation: 'fadeIn 0.25s ease' }}>
+                {/* 1. 猜你喜欢 */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Sparkles size={16} style={{ color: '#ec4899' }} />
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>猜你喜欢</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={refreshGuessLikes}
+                      className="guide-refresh-btn"
+                      title="换一批猜你喜欢"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 12,
+                        color: 'var(--text-muted)',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                      }}
+                    >
+                      <RotateCw size={12} />
+                      <span>换一换</span>
+                    </button>
+                  </div>
+
+                  <div className="guess-likes-grid">
+                    {guessLikes.map((word, idx) => (
+                      <div
+                        key={idx}
+                        className="guess-like-chip"
+                        onClick={() => void runSearchByTerm(word)}
+                        title={`点击搜索: ${word}`}
+                      >
+                        <span className="guess-like-text">{word}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. 热搜榜 */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                    <Flame size={16} style={{ color: '#ef4444' }} />
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>热搜榜</span>
+                  </div>
+
+                  {hotLoading && hotSearches.length === 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 12, padding: '12px 0' }}>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>正在加载热搜榜...</span>
+                    </div>
+                  ) : (
+                    <div className="hotsearch-grid">
+                      {hotSearches.slice(0, 10).map((item, idx) => {
+                        const rank = idx + 1;
+                        const isTop3 = rank <= 3;
+                        return (
+                          <div
+                            key={idx}
+                            className="hotsearch-item"
+                            onClick={() => void runSearchByTerm(item.searchWord)}
+                            title={`点击搜索: ${item.searchWord}`}
+                          >
+                            <span className={`hotsearch-rank ${isTop3 ? 'top3' : ''}`}>
+                              {rank}
+                            </span>
+                            <div className="hotsearch-info">
+                              <div className="hotsearch-word-row">
+                                <span className={`hotsearch-word ${isTop3 ? 'bold' : ''}`}>
+                                  {item.searchWord}
+                                </span>
+                                {item.iconUrl && (
+                                  <img src={item.iconUrl} alt="" className="hotsearch-badge" />
+                                )}
+                              </div>
+                              {item.content && (
+                                <span className="hotsearch-content" title={item.content}>
+                                  {item.content}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* 底部收起引导切换按钮 */}
+                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowSearchGuide(false)}
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      color: 'var(--text-muted)',
+                      fontSize: 12,
+                      padding: '5px 16px',
+                      borderRadius: 16,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    收起引导，浏览探索音乐馆
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* 探索发现模块 */}
-            {!keyword && !activeKeyword && songResults.length === 0 && playlistResults.length === 0 && (
+            {!showSearchGuide && !activeKeyword && !selectedPlaylist && songResults.length === 0 && playlistResults.length === 0 && (
               <DiscoveryView active={active} />
             )}
             
