@@ -1,109 +1,69 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { MusicApiService, OnlinePlaylist, ToplistDetail, OnlineSong } from '../services/musicApi';
+import {
+  MusicApiService,
+  OnlineAlbum,
+  OnlinePlaylist,
+  OnlineSong,
+  ToplistDetail,
+} from '../services/musicApi';
 import { usePlayer } from '../context/PlayerContext';
-import { Play, Music, Flame, Sparkles, Mic2, RefreshCw } from 'lucide-react';
+import { Play, Music, Flame, Mic2, Compass, Disc, Loader2 } from 'lucide-react';
 import { toPlayerSong } from '../utils/songUtils';
 import { CoverImage } from './CoverImage';
-/** 精品推荐每次展示条数 */
-const HQ_DISPLAY_COUNT = 10;
-/** 一次多拉一些，便于打乱/换一批 */
-const HQ_FETCH_LIMIT = 40;
-/** 发现页整体数据过期时间：再次进入时超过则重拉 */
+
 const DISCOVERY_TTL_MS = 15 * 60 * 1000;
-const HQ_CATS = ['全部', '华语', '流行', '电子', '轻音乐', '摇滚', '民谣', '说唱', '古风', '欧美'];
 
-function shufflePick<T>(items: T[], count: number): T[] {
-  const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy.slice(0, Math.min(count, copy.length));
-}
-
-function randomHqCat(): string {
-  return HQ_CATS[Math.floor(Math.random() * HQ_CATS.length)];
-}
+const GENRE_LIST = [
+  { name: '流行', icon: '🎧', color: 'rgba(168, 85, 247, 0.16)' },
+  { name: '摇滚', icon: '🎸', color: 'rgba(239, 68, 68, 0.16)' },
+  { name: '民谣', icon: '🌿', color: 'rgba(16, 185, 129, 0.16)' },
+  { name: '电子', icon: '⚡', color: 'rgba(59, 130, 246, 0.16)' },
+  { name: '说唱', icon: '🎤', color: 'rgba(245, 158, 11, 0.16)' },
+  { name: '古风', icon: '🏮', color: 'rgba(236, 72, 153, 0.16)' },
+  { name: '轻音乐', icon: '🍃', color: 'rgba(20, 184, 166, 0.16)' },
+  { name: '华语', icon: '🎵', color: 'rgba(139, 92, 246, 0.16)' },
+  { name: '欧美', icon: '🌍', color: 'rgba(99, 102, 241, 0.16)' },
+  { name: 'ACG', icon: '✨', color: 'rgba(244, 63, 94, 0.16)' },
+  { name: '爵士', icon: '🎷', color: 'rgba(217, 119, 6, 0.16)' },
+  { name: '影视原声', icon: '🎬', color: 'rgba(14, 165, 233, 0.16)' },
+];
 
 export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true }) => {
   const { playSong } = usePlayer();
   const [toplists, setToplists] = useState<ToplistDetail[]>([]);
-  const [hqPlaylists, setHqPlaylists] = useState<OnlinePlaylist[]>([]);
-  const [hqPool, setHqPool] = useState<OnlinePlaylist[]>([]);
-  const [hqCat, setHqCat] = useState('全部');
-  const [hqRefreshing, setHqRefreshing] = useState(false);
-  const [newSongs, setNewSongs] = useState<OnlineSong[]>([]);
   const [topArtists, setTopArtists] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [activeGenre, setActiveGenre] = useState<string>('流行');
+  const [genrePlaylists, setGenrePlaylists] = useState<OnlinePlaylist[]>([]);
+  const [genreLoading, setGenreLoading] = useState<boolean>(false);
+  const [newTab, setNewTab] = useState<'songs' | 'albums'>('songs');
+  const [newSongs, setNewSongs] = useState<OnlineSong[]>([]);
+  const [newAlbums, setNewAlbums] = useState<OnlineAlbum[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
+
   const fetchedRef = useRef(false);
   const lastFetchedAtRef = useRef(0);
-  const hqBeforeRef = useRef<number | undefined>(undefined);
+  const genreCacheRef = useRef<Record<string, OnlinePlaylist[]>>({});
 
-  const loadHighQuality = useCallback(async (mode: 'reshuffle' | 'refresh') => {
-    // 池子够大时先本地重抽，避免每次点「换一批」都打接口
-    if (mode === 'reshuffle' && hqPool.length > HQ_DISPLAY_COUNT) {
-      setHqPlaylists(shufflePick(hqPool, HQ_DISPLAY_COUNT));
+  const loadGenrePlaylists = useCallback(async (genre: string) => {
+    setActiveGenre(genre);
+    if (genreCacheRef.current[genre] && genreCacheRef.current[genre].length > 0) {
+      setGenrePlaylists(genreCacheRef.current[genre]);
       return;
     }
-
-    setHqRefreshing(true);
+    setGenreLoading(true);
     try {
-      const cat = randomHqCat();
-      const { playlists, lastUpdateTime } = await MusicApiService.getNeteaseHighQualityPlaylists({
-        limit: HQ_FETCH_LIMIT,
-        cat,
-        // 同分类翻页：池子不够时用游标再取一页
-        before: mode === 'refresh' ? undefined : hqBeforeRef.current,
-      });
-
-      let pool = playlists;
-      let usedCat = cat;
-      let usedBefore = lastUpdateTime;
-      if (pool.length === 0) {
-        usedCat = randomHqCat();
-        const retry = await MusicApiService.getNeteaseHighQualityPlaylists({
-          limit: HQ_FETCH_LIMIT,
-          cat: usedCat,
-        });
-        pool = retry.playlists;
-        usedBefore = retry.lastUpdateTime;
-      }
-
-      setHqCat(usedCat);
-      setHqPool(pool);
-      hqBeforeRef.current = usedBefore;
-      setHqPlaylists(shufflePick(pool, HQ_DISPLAY_COUNT));
-    } finally {
-      setHqRefreshing(false);
-    }
-  }, [hqPool]);
-
-  const handleRandomCatClick = useCallback(async () => {
-    if (hqRefreshing) return;
-    setHqRefreshing(true);
-    try {
-      const otherCats = HQ_CATS.filter(c => c !== hqCat && c !== '全部');
-      const nextCat = otherCats[Math.floor(Math.random() * otherCats.length)] || '流行';
-      
-      const { playlists, lastUpdateTime } = await MusicApiService.getNeteaseHighQualityPlaylists({
-        limit: HQ_FETCH_LIMIT,
-        cat: nextCat,
-      });
-
-      setHqCat(nextCat);
-      setHqPool(playlists || []);
-      hqBeforeRef.current = lastUpdateTime;
-      setHqPlaylists(shufflePick(playlists || [], HQ_DISPLAY_COUNT));
+      const list = await MusicApiService.getPlaylistsByCategory(genre, 8);
+      genreCacheRef.current[genre] = list || [];
+      setGenrePlaylists(list || []);
     } catch (e) {
-      console.error('Failed to change hq playlist category', e);
+      console.error('Failed to load genre playlists:', e);
     } finally {
-      setHqRefreshing(false);
+      setGenreLoading(false);
     }
-  }, [hqCat, hqRefreshing]);
+  }, []);
 
   useEffect(() => {
-    // 面板激活时拉取；15 分钟内重复进入复用缓存，避免每次切换侧边栏都打 4 个接口
     if (!active) return;
     const stale = Date.now() - lastFetchedAtRef.current > DISCOVERY_TTL_MS;
     if (fetchedRef.current && !stale) return;
@@ -112,21 +72,20 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
     const fetchDiscoveryData = async () => {
       setLoading(true);
       try {
-        const cat = randomHqCat();
-        const [tLists, hqResult, nSongs, artists] = await Promise.all([
-          MusicApiService.getNeteaseToplists(),
-          MusicApiService.getNeteaseHighQualityPlaylists({ limit: HQ_FETCH_LIMIT, cat }),
-          MusicApiService.getNewSongs(),
-          MusicApiService.getTopArtists(),
+        const [tLists, artists, genrePl, nSongs, nAlbums] = await Promise.all([
+          MusicApiService.getNeteaseToplists().catch(() => [] as ToplistDetail[]),
+          MusicApiService.getTopArtists().catch(() => []),
+          MusicApiService.getPlaylistsByCategory('流行', 8).catch(() => [] as OnlinePlaylist[]),
+          MusicApiService.getNewSongs().catch(() => [] as OnlineSong[]),
+          MusicApiService.getNewAlbums(12).catch(() => [] as OnlineAlbum[]),
         ]);
 
         setToplists(tLists || []);
-        setHqCat(cat);
-        setHqPool(hqResult.playlists || []);
-        hqBeforeRef.current = hqResult.lastUpdateTime;
-        setHqPlaylists(shufflePick(hqResult.playlists || [], HQ_DISPLAY_COUNT));
-        setNewSongs((nSongs || []).slice(0, 10));
         setTopArtists((artists || []).slice(0, 12));
+        genreCacheRef.current['流行'] = genrePl || [];
+        setGenrePlaylists(genrePl || []);
+        setNewSongs((nSongs || []).slice(0, 10));
+        setNewAlbums((nAlbums || []).slice(0, 12));
         lastFetchedAtRef.current = Date.now();
       } catch (e: any) {
         console.error('Failed to fetch discovery data', e);
@@ -141,9 +100,24 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
   }, [active]);
 
   const handlePlaylistClick = (id: string) => {
-    window.dispatchEvent(new CustomEvent('openPlaylist', {
-      detail: { id, isNeteaseDirect: true, source: 'netease' },
-    }));
+    window.dispatchEvent(
+      new CustomEvent('openPlaylist', {
+        detail: { id, isNeteaseDirect: true, source: 'netease' },
+      })
+    );
+  };
+
+  const handleAlbumClick = (album: OnlineAlbum) => {
+    window.dispatchEvent(
+      new CustomEvent('openAlbum', {
+        detail: {
+          albumId: album.id,
+          albumName: album.name,
+          artistName: album.artist,
+          source: 'netease',
+        },
+      })
+    );
   };
 
   const formatCount = (count?: number) => {
@@ -159,21 +133,20 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 32, padding: '20px 0' }}>
-        {/* Skeleton UI */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="skeleton-box" style={{ width: 120, height: 28, borderRadius: 8 }} />
-          <div className="playlist-grid">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="skeleton-box" style={{ aspectRatio: '1/1', borderRadius: 12 }} />
+      <div className="discovery-view-root" style={{ display: 'flex', flexDirection: 'column', gap: 28, padding: '12px 0' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="skeleton-box" style={{ width: 120, height: 24, borderRadius: 8 }} />
+          <div className="toplist-grid">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="skeleton-box" style={{ height: 110, borderRadius: 12 }} />
             ))}
           </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="skeleton-box" style={{ width: 120, height: 28, borderRadius: 8 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="skeleton-box" style={{ width: 120, height: 24, borderRadius: 8 }} />
           <div className="playlist-grid">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="skeleton-box" style={{ height: 160, borderRadius: 12 }} />
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="skeleton-box" style={{ aspectRatio: '1/1', borderRadius: 12 }} />
             ))}
           </div>
         </div>
@@ -182,110 +155,16 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
   }
 
   return (
-    <div className="discovery-view-root" style={{ display: 'flex', flexDirection: 'column', gap: 36, padding: '20px 0', animation: 'fadeIn 0.5s ease' }}>
-      
-      {/* 精品歌单：多拉一批 + 打乱展示；可换一批 */}
-      {hqPlaylists.length > 0 && (
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Sparkles size={20} style={{ color: 'var(--primary-color)' }} />
-            <h2 style={{ fontSize: 18, margin: 0 }}>精品推荐</h2>
-            {hqCat && (
-              <button
-                className="category-pill-btn"
-                onClick={() => void handleRandomCatClick()}
-                disabled={hqRefreshing}
-                title="点击随机切换其他风格歌单"
-                style={{
-                  fontSize: 12,
-                  color: 'var(--primary-color)',
-                  background: 'rgba(168, 85, 247, 0.12)',
-                  border: '1px solid rgba(168, 85, 247, 0.3)',
-                  padding: '2px 8px',
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                <span>{hqCat === '全部' ? '精选' : hqCat}</span>
-                <span style={{ fontSize: 10, opacity: 0.7 }}>🎲</span>
-              </button>
-            )}
-            <button
-              className="icon-btn"
-              onClick={() => void loadHighQuality(hqPool.length > HQ_DISPLAY_COUNT ? 'reshuffle' : 'refresh')}
-              disabled={hqRefreshing}
-              title="换一批精品歌单"
-              style={{
-                marginLeft: 'auto',
-                width: 'auto',
-                height: 28,
-                padding: '0 10px',
-                gap: 6,
-                borderRadius: 14,
-                background: 'rgba(255,255,255,0.05)',
-                fontSize: 12,
-                opacity: hqRefreshing ? 0.6 : 1,
-              }}
-            >
-              <RefreshCw size={13} className={hqRefreshing ? 'animate-spin' : undefined} />
-              <span>换一批</span>
-            </button>
-          </div>
-          <div className="playlist-grid">
-            {hqPlaylists.map(pl => (
-              <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id)}>
-                <div className="playlist-cover-wrapper">
-                  <CoverImage src={pl.cover} alt="" className="playlist-card-cover" />
-                  <div className="playlist-stats">
-                    <div className="playlist-stat-item">
-                      <Play size={10} fill="currentColor" />
-                      <span>{formatCount(pl.playCount)}</span>
-                    </div>
-                  </div>
-                </div>
-                <span className="playlist-card-name" title={pl.name}>{pl.name}</span>
-                <span className="playlist-card-author">{pl.creatorName || '官方'}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 热门歌手 */}
-      {topArtists.length > 0 && (
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Mic2 size={20} style={{ color: '#10b981' }} />
-            <h2 style={{ fontSize: 18, margin: 0 }}>热门歌手</h2>
-          </div>
-          <div className="playlist-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
-            {topArtists.map(artist => (
-              <div 
-                key={artist.id} 
-                className="playlist-card" 
-                onClick={() => window.dispatchEvent(new CustomEvent('globalSearch', { detail: artist.name }))}
-                style={{ textAlign: 'center' }}
-              >
-                <div className="playlist-cover-wrapper" style={{ borderRadius: '50%', aspectRatio: '1/1', overflow: 'hidden' }}>
-                  <CoverImage src={artist.picUrl} alt={artist.name} className="playlist-card-cover" style={{ objectFit: 'cover' }} />
-                </div>
-                <span className="playlist-card-name" style={{ marginTop: 12, display: 'block', width: '100%' }} title={artist.name}>{artist.name}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 官方榜单 */}
+    <div
+      className="discovery-view-root"
+      style={{ display: 'flex', flexDirection: 'column', gap: 28, padding: '12px 0', animation: 'fadeIn 0.4s ease' }}
+    >
+      {/* 1. 排行榜模块 */}
       {toplists.length > 0 && (
         <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Flame size={20} style={{ color: '#ef4444' }} />
-            <h2 style={{ fontSize: 18, margin: 0 }}>官方榜单</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Flame size={19} style={{ color: '#ef4444' }} />
+            <h2 style={{ fontSize: 17, margin: 0 }}>排行榜</h2>
           </div>
           <div className="toplist-grid">
             {toplists.map(tl => (
@@ -314,42 +193,189 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
         </section>
       )}
 
-      {/* 新歌速递 */}
-      {newSongs.length > 0 && (
+      {/* 2. 歌手模块 */}
+      {topArtists.length > 0 && (
         <section>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Music size={20} style={{ color: '#3b82f6' }} />
-            <h2 style={{ fontSize: 18, margin: 0 }}>新歌速递</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Mic2 size={19} style={{ color: '#10b981' }} />
+            <h2 style={{ fontSize: 17, margin: 0 }}>歌手</h2>
           </div>
-          <div className="song-list-container discovery-newsong-grid">
-            {newSongs.map((song) => (
-              <div 
-                key={song.id} 
-                className="song-row discovery-song-row"
-                onClick={() => handlePlaySong(song)}
+          <div className="playlist-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))' }}>
+            {topArtists.map(artist => (
+              <div
+                key={artist.id}
+                className="playlist-card"
+                onClick={() => window.dispatchEvent(new CustomEvent('globalSearch', { detail: artist.name }))}
+                style={{ textAlign: 'center' }}
               >
-                <CoverImage src={song.pic || ''} alt="" className="discovery-song-cover" />
-                <div className="song-col-info" style={{ flex: 1, minWidth: 0 }}>
-                  <div className="song-title-row">
-                    <span className="song-name" style={{ fontSize: 14 }}>{song.name}</span>
-                  </div>
-                  <span className="song-artist" style={{ fontSize: 12 }}>{song.artist}</span>
+                <div className="playlist-cover-wrapper" style={{ borderRadius: '50%', aspectRatio: '1/1', overflow: 'hidden' }}>
+                  <CoverImage src={artist.picUrl} alt={artist.name} className="playlist-card-cover" style={{ objectFit: 'cover' }} />
                 </div>
-                <div className="discovery-play-icon">
-                  <Play size={15} fill="currentColor" />
-                </div>
+                <span className="playlist-card-name" style={{ marginTop: 8, display: 'block', width: '100%' }} title={artist.name}>
+                  {artist.name}
+                </span>
               </div>
             ))}
           </div>
         </section>
       )}
 
+      {/* 3. 曲风专区模块 */}
+      <section>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Compass size={19} style={{ color: '#a855f7' }} />
+          <h2 style={{ fontSize: 17, margin: 0 }}>曲风分类</h2>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>点击曲风探索对应歌单</span>
+        </div>
+
+        <div className="genre-chips-grid">
+          {GENRE_LIST.map(g => {
+            const isSelected = activeGenre === g.name;
+            return (
+              <button
+                key={g.name}
+                type="button"
+                className={`genre-chip-btn ${isSelected ? 'active' : ''}`}
+                onClick={() => void loadGenrePlaylists(g.name)}
+                style={{
+                  background: isSelected ? 'var(--primary-color)' : g.color,
+                  borderColor: isSelected ? 'var(--primary-hover)' : 'rgba(255,255,255,0.08)',
+                }}
+              >
+                <span className="genre-chip-icon">{g.icon}</span>
+                <span className="genre-chip-name">{g.name}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          {genreLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 0', color: 'var(--text-muted)', fontSize: 13 }}>
+              <Loader2 size={16} className="animate-spin" />
+              <span>正在加载「{activeGenre}」曲风歌单...</span>
+            </div>
+          ) : (
+            <div className="playlist-grid">
+              {genrePlaylists.map(pl => (
+                <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id)}>
+                  <div className="playlist-cover-wrapper">
+                    <CoverImage src={pl.cover} alt="" className="playlist-card-cover" />
+                    <div className="playlist-stats">
+                      <div className="playlist-stat-item">
+                        <Play size={10} fill="currentColor" />
+                        <span>{formatCount(pl.playCount)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span className="playlist-card-name" title={pl.name}>
+                    {pl.name}
+                  </span>
+                  <span className="playlist-card-author">{pl.creatorName || activeGenre}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* 4. 新歌新碟模块（支持 新歌速递 / 新碟上架 切换） */}
+      {(newSongs.length > 0 || newAlbums.length > 0) && (
+        <section>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Disc size={19} style={{ color: '#3b82f6' }} />
+              <h2 style={{ fontSize: 17, margin: 0 }}>新歌新碟</h2>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setNewTab('songs')}
+                className={`source-tab ${newTab === 'songs' ? 'active' : ''}`}
+                style={{ padding: '4px 12px', borderRadius: 14, fontSize: 12 }}
+              >
+                新歌速递
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewTab('albums')}
+                className={`source-tab ${newTab === 'albums' ? 'active' : ''}`}
+                style={{ padding: '4px 12px', borderRadius: 14, fontSize: 12 }}
+              >
+                新碟上架
+              </button>
+            </div>
+          </div>
+
+          {newTab === 'songs' ? (
+            <div className="song-list-container discovery-newsong-grid">
+              {newSongs.map(song => (
+                <div
+                  key={song.id}
+                  className="song-row discovery-song-row"
+                  onClick={() => handlePlaySong(song)}
+                >
+                  <CoverImage src={song.pic || ''} alt="" className="discovery-song-cover" />
+                  <div className="song-col-info" style={{ flex: 1, minWidth: 0 }}>
+                    <div className="song-title-row">
+                      <span className="song-name" style={{ fontSize: 14 }}>
+                        {song.name}
+                      </span>
+                    </div>
+                    <span className="song-artist" style={{ fontSize: 12 }}>
+                      {song.artist}
+                    </span>
+                  </div>
+                  <div className="discovery-play-icon">
+                    <Play size={15} fill="currentColor" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="playlist-grid">
+              {newAlbums.map(album => (
+                <div key={album.id} className="playlist-card" onClick={() => handleAlbumClick(album)}>
+                  <div className="playlist-cover-wrapper">
+                    <CoverImage src={album.picUrl} alt={album.name} className="playlist-card-cover" />
+                    {album.size ? (
+                      <div className="playlist-stats">
+                        <div className="playlist-stat-item">
+                          <Music size={10} />
+                          <span>{album.size}首</span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <span className="playlist-card-name" title={album.name}>
+                    {album.name}
+                  </span>
+                  <span className="playlist-card-author" title={album.artist}>
+                    {album.artist}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {/* 空状态保护 */}
-      {!loading && toplists.length === 0 && hqPlaylists.length === 0 && newSongs.length === 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', marginTop: 60 }}>
-          <Sparkles size={48} strokeWidth={1} style={{ marginBottom: 16, color: 'var(--primary-color)' }} />
+      {!loading && toplists.length === 0 && topArtists.length === 0 && newSongs.length === 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--text-muted)',
+            marginTop: 60,
+          }}
+        >
+          <Compass size={48} strokeWidth={1} style={{ marginBottom: 16, color: 'var(--primary-color)' }} />
           <h3 style={{ margin: 0 }}>探索发现</h3>
-          <p style={{ marginTop: 8, fontSize: 13 }}>暂未获取到推荐内容，请尝试搜索你想听的歌曲</p>
+          <p style={{ marginTop: 8, fontSize: 13 }}>暂未获取到音乐馆内容，请尝试在上方搜索你想听的歌曲</p>
           {errorMsg && (
             <p style={{ marginTop: 16, fontSize: 12, color: '#ef4444', maxWidth: '80%', textAlign: 'center', wordBreak: 'break-all' }}>
               Error Detail: {errorMsg}
@@ -357,7 +383,6 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
           )}
         </div>
       )}
-
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { PlayerProvider } from './context/PlayerContext';
 import { ToastProvider } from './context/ToastContext';
 import { Sidebar } from './components/Sidebar';
@@ -6,6 +6,7 @@ import { PlayerBar } from './components/PlayerBar';
 import { LyricView } from './components/LyricView';
 import { LocalMusicPanel } from './components/LocalMusicPanel';
 import { SearchPanel } from './components/SearchPanel';
+import { RecommendPanel } from './components/RecommendPanel';
 import { PlaylistPanel } from './components/PlaylistPanel';
 import { FavoritePanel } from './components/FavoritePanel';
 import { AboutPanel } from './components/AboutPanel';
@@ -25,15 +26,40 @@ function MainLayout() {
     return isAndroid() ? ('block' as const) : ('contents' as const);
   };
 
-  const [activeTab, setActiveTab] = useState<string>('search');
+  const [activeTab, setActiveTab] = useState<string>('recommend');
+  const prevTabRef = useRef<string>('recommend');
   const [isLyricOpen, setIsLyricOpen] = useState<boolean>(false);
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState<boolean>(false);
   const [isReportOpen, setIsReportOpen] = useState<boolean>(false);
 
+  const handleSelectTab = (tab: string) => {
+    if (tab !== 'playlist') {
+      prevTabRef.current = tab;
+    }
+    setActiveTab(tab);
+    if (isLyricOpen) {
+      setIsLyricOpen(false);
+    }
+  };
+
+  const handleTogglePlaylist = () => {
+    if (isLyricOpen) {
+      setIsLyricOpen(false);
+      setActiveTab('playlist');
+      return;
+    }
+    if (activeTab === 'playlist') {
+      setActiveTab(prevTabRef.current || 'recommend');
+    } else {
+      prevTabRef.current = activeTab;
+      setActiveTab('playlist');
+    }
+  };
+
   useShortcuts({
-    onTogglePlaylist: () => setActiveTab('playlist'),
+    onTogglePlaylist: handleTogglePlaylist,
     onFocusSearch: () => {
-      setActiveTab('search');
+      handleSelectTab('search');
       setTimeout(() => window.dispatchEvent(new Event('focusSearchInput')), 50);
     },
     onShowHelp: () => setIsShortcutHelpOpen(true),
@@ -42,6 +68,7 @@ function MainLayout() {
 
   useEffect(() => {
     const switchToSearch = () => {
+      prevTabRef.current = 'search';
       setActiveTab('search');
     };
     window.addEventListener('globalSearch', switchToSearch);
@@ -64,7 +91,6 @@ function MainLayout() {
     }
   }, [isLyricOpen]);
 
-
   return (
     <div className="app-container">
       <div
@@ -77,13 +103,20 @@ function MainLayout() {
 
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleSelectTab}
         onOpenReport={() => setIsReportOpen(true)}
       />
 
       <main className="main-content">
-        <div style={{ display: panelDisplay('search', activeTab), height: '100%' }}><SearchPanel active={activeTab === 'search'} /></div>
-        <div style={{ display: panelDisplay('my', activeTab), height: '100%' }}><MyMusicMobilePanel onOpenReport={() => setIsReportOpen(true)} /></div>
+        <div style={{ display: panelDisplay('recommend', activeTab), height: '100%' }}>
+          <RecommendPanel active={activeTab === 'recommend'} />
+        </div>
+        <div style={{ display: panelDisplay('search', activeTab), height: '100%' }}>
+          <SearchPanel active={activeTab === 'search'} />
+        </div>
+        <div style={{ display: panelDisplay('my', activeTab), height: '100%' }}>
+          <MyMusicMobilePanel onOpenReport={() => setIsReportOpen(true)} />
+        </div>
         <div style={{ display: panelDisplay('local', activeTab), height: '100%' }}><LocalMusicPanel /></div>
         <div style={{ display: panelDisplay('smart', activeTab), height: '100%' }}><SmartPlaylistsPanel /></div>
         <div style={{ display: panelDisplay('playlist', activeTab), height: '100%' }}><PlaylistPanel /></div>
@@ -95,6 +128,8 @@ function MainLayout() {
       <PlayerBar
         onToggleFullscreen={() => setIsLyricOpen(prev => !prev)}
         isLyricOpen={isLyricOpen}
+        onTogglePlaylist={handleTogglePlaylist}
+        isPlaylistOpen={activeTab === 'playlist' && !isLyricOpen}
       />
       <LyricView isOpen={isLyricOpen} onClose={() => setIsLyricOpen(false)} />
 

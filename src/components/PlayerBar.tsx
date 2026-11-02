@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  Repeat, Repeat1, Shuffle, Maximize2, Minimize2, Loader2, Heart, MonitorSpeaker, Disc
+  Repeat, Repeat1, Shuffle, Maximize2, Minimize2, Loader2, Heart, MonitorSpeaker, Disc, ListMusic
 } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
@@ -12,11 +12,19 @@ import { isAndroid, isMobileShell } from '../utils/platform';
 interface PlayerBarProps {
   onToggleFullscreen: () => void;
   isLyricOpen?: boolean;
+  onTogglePlaylist?: () => void;
+  isPlaylistOpen?: boolean;
 }
 
-export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyricOpen = false }) => {
+export const PlayerBar: React.FC<PlayerBarProps> = ({
+  onToggleFullscreen,
+  isLyricOpen = false,
+  onTogglePlaylist,
+  isPlaylistOpen = false,
+}) => {
   const {
     currentSong,
+    playlist,
     isLoading,
     volume,
     playMode,
@@ -235,7 +243,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyri
         </div>
       </div>
 
-      {/* 右侧：音量与功能 */}
+      {/* 右侧：收藏、播放模式、正在播放列表与音量控制 */}
       <div className="player-right">
         <button
           className={`control-btn mobile-keep-btn ${currentSong && isFavorite(currentSong) ? 'favorited' : ''}`}
@@ -251,6 +259,23 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyri
           {playMode === 'random' && <Shuffle size={16} style={{ color: 'var(--primary-color)' }} />}
           {playMode === 'list-loop' && <Repeat size={16} />}
         </button>
+
+        {onTogglePlaylist && (
+          <button
+            className="control-btn mobile-keep-btn player-queue-btn"
+            onClick={onTogglePlaylist}
+            title={`正在播放列表 (${playlist.length})`}
+            style={{
+              color: isPlaylistOpen ? 'var(--primary-hover)' : undefined,
+              position: 'relative',
+            }}
+          >
+            <ListMusic size={17} />
+            {playlist.length > 0 && (
+              <span className="player-queue-badge">{playlist.length > 99 ? '99+' : playlist.length}</span>
+            )}
+          </button>
+        )}
 
         {/* 桌面歌词第二窗仅 Windows/macOS；Android 车机改用应用内全屏歌词 */}
         {!isAndroid() && (

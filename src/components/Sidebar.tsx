@@ -1,5 +1,5 @@
 import React from 'react';
-import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History, BarChart3, Sparkles } from 'lucide-react';
+import { Disc, Heart, ListMusic, Minus, Music, Search, Settings, Square, X, Keyboard, History, BarChart3, Sparkles, Compass } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const isTauri = typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
@@ -12,9 +12,10 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpenReport }) => {
   const menuItems = [
+    { id: 'recommend', name: '为你推荐', icon: Sparkles },
+    { id: 'search', name: '音乐搜索', icon: Search },
     { id: 'playlist', name: '正在播放', icon: ListMusic },
-    { id: 'search', name: '在线音乐', icon: Search },
-    { id: 'smart', name: '智能歌单', icon: Sparkles },
+    { id: 'smart', name: '智能歌单', icon: Compass },
     { id: 'local', name: '本地歌曲', icon: Music },
     { id: 'history', name: '最近播放', icon: History },
     { id: 'favorites', name: '我的收藏', icon: Heart },
@@ -81,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
           );
         })}
       </ul>
-      
+
       <div style={{ flex: 1 }} className="desktop-spacer" />
       <ul className="nav-menu desktop-nav-menu" style={{ marginBottom: 16 }}>
         <li
@@ -102,13 +103,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
         </li>
       </ul>
 
-      {/* 移动端专属 4 核心 Tab 底部栏（纯图标，不显示文字） */}
+      {/* 移动端专属 4 核心 Tab 底部栏（纯图标：推荐、搜索、我的、设置） */}
       <ul className="nav-menu mobile-nav-menu">
+        <li
+          className={`nav-item ${activeTab === 'recommend' ? 'active' : ''}`}
+          onClick={() => setActiveTab('recommend')}
+          title="推荐"
+          aria-label="推荐"
+        >
+          <Sparkles size={22} />
+        </li>
         <li
           className={`nav-item ${activeTab === 'search' ? 'active' : ''}`}
           onClick={() => setActiveTab('search')}
-          title="发现"
-          aria-label="发现"
+          title="搜索"
+          aria-label="搜索"
         >
           <Search size={22} />
         </li>
@@ -119,14 +128,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
           aria-label="我的"
         >
           <Music size={22} />
-        </li>
-        <li
-          className={`nav-item ${activeTab === 'playlist' ? 'active' : ''}`}
-          onClick={() => setActiveTab('playlist')}
-          title="播放队列"
-          aria-label="播放队列"
-        >
-          <ListMusic size={22} />
         </li>
         <li
           className={`nav-item ${activeTab === 'about' ? 'active' : ''}`}

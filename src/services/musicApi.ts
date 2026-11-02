@@ -53,6 +53,15 @@ export interface PlaylistDetail extends OnlinePlaylist {
   item: OnlineSong[];
 }
 
+export interface OnlineAlbum {
+  id: string;
+  name: string;
+  artist: string;
+  picUrl: string;
+  publishTime?: number;
+  size?: number;
+}
+
 async function postRequest(types: string, extraParams: Record<string, any>): Promise<any> {
   const endpoints = getEnabledApiEndpoints();
   if (endpoints.length === 0) {
@@ -1065,7 +1074,7 @@ export const MusicApiService = {
       }
 
       if (Array.isArray(data.list)) {
-        return data.list.slice(0, 4).map((tl: any) => ({
+        return data.list.slice(0, 6).map((tl: any) => ({
           id: String(tl.id),
           name: tl.name,
           cover: resolveImageUrl(tl.coverImgUrl, tl.picUrl) || '',
@@ -1215,6 +1224,227 @@ export const MusicApiService = {
     } catch (err: any) {
       console.error('Failed to get top artists:', err);
       throw err;
+    }
+    return [];
+  },
+
+  /**
+   * 将任意来源的歌曲解析为网易云数字 songId（用于调用网易云相似歌曲/相似歌单推荐接口）
+   */
+  async resolveNeteaseSongId(seed: { id?: string; name: string; artist?: string; source?: string }): Promise<string | null> {
+    if (seed.source === 'netease' && seed.id && /^\d+$/.test(String(seed.id))) {
+      return String(seed.id);
+    }
+    const rawId = String(seed.id || '').replace(/^netease_/, '');
+    if (/^\d+$/.test(rawId) && (!seed.source || seed.source === 'netease')) {
+      return rawId;
+    }
+    const query = `${seed.name || ''} ${seed.artist || ''}`.trim();
+    if (!query) return null;
+    try {
+      const response = await universalFetch(`http://music.163.com/api/cloudsearch/pc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Referer': 'https://music.163.com',
+        },
+        body: `s=${encodeURIComponent(query)}&type=1&limit=1&offset=0`,
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const foundId = data?.result?.songs?.[0]?.id;
+        if (foundId) return String(foundId);
+      }
+    } catch (err) {
+      console.warn('resolveNeteaseSongId failed:', err);
+    }
+    return null;
+  },
+
+  /**
+   * 根据听过的歌曲获取相似歌单推荐 (/api/discovery/simiPlaylist)
+   */
+  async getSimiPlaylists(
+    seed: { id?: string; name: string; artist?: string; source?: string },
+    limit: number = 8
+  ): Promise<OnlinePlaylist[]> {
+    try {
+      const neteaseId = await this.resolveNeteaseSongId(seed);
+      if (!neteaseId) return [];
+      const response = await universalFetch(
+        `https://music.163.com/api/discovery/simiPlaylist?songid=${encodeURIComponent(neteaseId)}&limit=${limit}&offset=0`,
+        {
+          method: 'GET',
+          headers: {
+            'Referer': 'https://music.163.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        }
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (data?.code === 200 && Array.isArray(data.playlists)) {
+        return data.playlists.map((pl: any) => mapPlaylist(pl));
+      }
+    } catch (err) {
+      console.warn('getSimiPlaylists failed:', err);
+    }
+    return [];
+  },
+
+  /**
+   * 根据听过的歌曲获取相似歌曲推荐 (/api/v1/discovery/simiSong + 相似歌单曲目智能兜底)
+   */
+  async getSimiSongs(
+    seed: { id?: string; name: string; artist?: string; source?: string },
+    limit: number = 12
+  ): Promise<OnlineSong[]> {
+    try {
+      const neteaseId = await this.resolveNeteaseSongId(seed);
+      if (neteaseId) {
+        const response = await universalFetch(
+          `https://music.163.com/api/v1/discovery/simiSong?songid=${encodeURIComponent(neteaseId)}&limit=${limit}&offset=0`,
+          {
+            method: 'GET',
+            headers: {
+              'Referer': 'https://music.163.com',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.code === 200 && Array.isArray(data.songs) && data.songs.length > 0) {
+            return data.songs.slice(0, limit).map((item: any) => mapOnlineSong({
+              ...item,
+              picUrl: item.album?.picUrl || item.al?.picUrl || '',
+            }, 'netease'));
+          }
+        }
+
+        // 若单曲 simiSong 返回为空，自动从包含该歌曲的相似歌单 (simiPlaylist) 中提取同品味曲目
+        const simiPls = await this.getSimiPlaylists(seed, 2);
+        if (simiPls.length > 0) {
+          const detail = await this.getPlaylistDetails(simiPls[0].id, true, 'netease').catch(() => null);
+          if (detail && detail.item.length > 0) {
+            const filtered = detail.item.filter(
+              s => s.id !== neteaseId && s.name !== seed.name
+            );
+            if (filtered.length > 0) {
+              return filtered.slice(0, limit);
+            }
+          }
+        }
+      }
+
+      // 终极兜底：按同歌手检索热门代表作
+      if (seed.artist && seed.artist !== '未知歌手') {
+        const firstArtist = seed.artist.split(/[/,&，、]/)[0].trim();
+        if (firstArtist) {
+          const byArtist = await this.searchSongs(firstArtist, 'netease', 1);
+          return byArtist.filter(s => s.name !== seed.name).slice(0, limit);
+        }
+      }
+    } catch (err) {
+      console.warn('getSimiSongs failed:', err);
+    }
+    return [];
+  },
+
+  /**
+   * 网易云官方每日精选推荐歌单 (/api/personalized/playlist)
+   */
+  async getPersonalizedPlaylists(limit: number = 12): Promise<OnlinePlaylist[]> {
+    try {
+      const response = await universalFetch(
+        `https://music.163.com/api/personalized/playlist?limit=${limit}`,
+        {
+          method: 'GET',
+          headers: {
+            'Referer': 'https://music.163.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.code === 200 && Array.isArray(data.result)) {
+          return data.result.map((pl: any) => ({
+            id: String(pl.id),
+            name: pl.name || '精选歌单',
+            cover: resolveImageUrl(pl.picUrl, pl.coverImgUrl) || '',
+            creatorName: pl.copywriter || '推荐精选',
+            creatorAvatar: '',
+            playCount: Number(pl.playCount || 0),
+            trackCount: Number(pl.trackCount || 0),
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('getPersonalizedPlaylists failed:', err);
+    }
+    return [];
+  },
+
+  /**
+   * 按曲风分类获取热门歌单 (/api/playlist/list?cat=xxx&order=hot)
+   */
+  async getPlaylistsByCategory(cat: string, limit: number = 12, offset: number = 0): Promise<OnlinePlaylist[]> {
+    try {
+      const url = `https://music.163.com/api/playlist/list?cat=${encodeURIComponent(cat)}&order=hot&limit=${limit}&offset=${offset}`;
+      const response = await universalFetch(url, {
+        method: 'GET',
+        headers: {
+          'Referer': 'https://music.163.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.code === 200 && Array.isArray(data.playlists) && data.playlists.length > 0) {
+          return data.playlists.map((pl: any) => mapPlaylist(pl));
+        }
+      }
+    } catch (err) {
+      console.warn('getPlaylistsByCategory failed, falling back to highquality:', err);
+    }
+    const hq = await this.getNeteaseHighQualityPlaylists({ cat, limit }).catch(() => ({ playlists: [] }));
+    return hq.playlists;
+  },
+
+  /**
+   * 获取新碟上架列表 (/api/album/new)
+   */
+  async getNewAlbums(limit: number = 12, area: string = 'ALL'): Promise<OnlineAlbum[]> {
+    try {
+      const url = `https://music.163.com/api/album/new?area=${encodeURIComponent(area)}&offset=0&limit=${limit}&total=true`;
+      const response = await universalFetch(url, {
+        method: 'GET',
+        headers: {
+          'Referer': 'https://music.163.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.code === 200 && Array.isArray(data.albums)) {
+          return data.albums.map((al: any) => {
+            const artistName = Array.isArray(al.artists) && al.artists.length > 0
+              ? al.artists.map((a: any) => a.name).join(' / ')
+              : (al.artist?.name || '未知歌手');
+            return {
+              id: String(al.id),
+              name: al.name || '未知专辑',
+              artist: artistName,
+              picUrl: resolveImageUrl(al.picUrl, al.blurPicUrl) || '',
+              publishTime: al.publishTime ? Number(al.publishTime) : undefined,
+              size: al.size ? Number(al.size) : undefined,
+            };
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('getNewAlbums failed:', err);
     }
     return [];
   },
