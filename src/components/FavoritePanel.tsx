@@ -1,12 +1,14 @@
-import React, { useState, useRef } from 'react';
-import { Heart, Play, Plus, Music, ArrowUp, Download, Upload, RefreshCw, Key, Edit3, X, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { Heart, Play, Plus, Music, ArrowUp, Download, Upload, RefreshCw, Key, Edit3, X, ArrowUpCircle, ArrowDownCircle, Search } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { CoverImage } from './CoverImage';
 import { MUSIC_SOURCES } from '../settings';
 import { DEFAULT_SYNC_CODE, generateRandomSyncCode } from '../services/syncService';
+import { isSameSong } from '../utils/songUtils';
 
 export const FavoritePanel: React.FC = () => {
   const {
+    currentSong,
     favoriteSongs,
     favoritePlaylists,
     favoriteArtists,
@@ -24,10 +26,37 @@ export const FavoritePanel: React.FC = () => {
     updateSyncCode,
   } = usePlayer();
   const [activeTab, setActiveTab] = useState<'songs' | 'artists' | 'playlists'>('songs');
+  const [filterKeyword, setFilterKeyword] = useState('');
+  const [showBackTop, setShowBackTop] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [tempCode, setTempCode] = useState(syncCode);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredSongs = useMemo(() => {
+    const q = filterKeyword.trim().toLowerCase();
+    if (!q) return favoriteSongs;
+    return favoriteSongs.filter(
+      s =>
+        s.name.toLowerCase().includes(q) ||
+        s.artist.toLowerCase().includes(q) ||
+        (s.album && s.album.toLowerCase().includes(q))
+    );
+  }, [favoriteSongs, filterKeyword]);
+
+  const filteredArtists = useMemo(() => {
+    const q = filterKeyword.trim().toLowerCase();
+    if (!q) return favoriteArtists;
+    return favoriteArtists.filter(a => a.name.toLowerCase().includes(q));
+  }, [favoriteArtists, filterKeyword]);
+
+  const filteredPlaylists = useMemo(() => {
+    const q = filterKeyword.trim().toLowerCase();
+    if (!q) return favoritePlaylists;
+    return favoritePlaylists.filter(
+      p => p.name.toLowerCase().includes(q) || (p.creatorName && p.creatorName.toLowerCase().includes(q))
+    );
+  }, [favoritePlaylists, filterKeyword]);
 
   const handleSyncClick = async () => {
     setIsSyncing(true);
@@ -60,9 +89,9 @@ export const FavoritePanel: React.FC = () => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handlePlaylistClick = (id: string) => {
+  const handlePlaylistClick = (id: string, source = 'netease') => {
     window.dispatchEvent(new CustomEvent('openPlaylist', {
-      detail: { id, isNeteaseDirect: true, source: 'netease' },
+      detail: { id, isNeteaseDirect: source === 'netease', source },
     }));
     window.dispatchEvent(new CustomEvent('globalSearch', { detail: '' }));
   };
@@ -84,9 +113,11 @@ export const FavoritePanel: React.FC = () => {
       <div className="glass-card" style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
-              <ArrowUp size={18} />
-            </button>
+            {showBackTop && (
+              <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
+                <ArrowUp size={18} />
+              </button>
+            )}
             <Heart size={24} fill="#ef4444" stroke="#ef4444" />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -186,44 +217,92 @@ export const FavoritePanel: React.FC = () => {
           </div>
         </div>
 
-        <div className="type-selectors" style={{ marginTop: 24 }}>
-          <label className={`type-radio ${activeTab === 'songs' ? 'active' : ''}`}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 18 }}>
+          <div className="type-selectors" style={{ margin: 0 }}>
+            <label className={`type-radio ${activeTab === 'songs' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="favType"
+                checked={activeTab === 'songs'}
+                onChange={() => setActiveTab('songs')}
+                style={{ display: 'none' }}
+              />
+              <span style={{ fontSize: '1.05em', fontWeight: activeTab === 'songs' ? 700 : 500 }}>歌曲 ({favoriteSongs.length})</span>
+            </label>
+            <label className={`type-radio ${activeTab === 'artists' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="favType"
+                checked={activeTab === 'artists'}
+                onChange={() => setActiveTab('artists')}
+                style={{ display: 'none' }}
+              />
+              <span style={{ fontSize: '1.05em', fontWeight: activeTab === 'artists' ? 700 : 500 }}>歌手 ({favoriteArtists.length})</span>
+            </label>
+            <label className={`type-radio ${activeTab === 'playlists' ? 'active' : ''}`}>
+              <input
+                type="radio"
+                name="favType"
+                checked={activeTab === 'playlists'}
+                onChange={() => setActiveTab('playlists')}
+                style={{ display: 'none' }}
+              />
+              <span style={{ fontSize: '1.05em', fontWeight: activeTab === 'playlists' ? 700 : 500 }}>歌单 ({favoritePlaylists.length})</span>
+            </label>
+          </div>
+
+          <div style={{ position: 'relative', minWidth: 180, flex: '0 1 240px' }}>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
             <input
-              type="radio"
-              name="favType"
-              checked={activeTab === 'songs'}
-              onChange={() => setActiveTab('songs')}
-              style={{ display: 'none' }}
+              type="text"
+              value={filterKeyword}
+              onChange={e => setFilterKeyword(e.target.value)}
+              placeholder="在收藏中筛选..."
+              style={{
+                width: '100%',
+                height: 32,
+                padding: '0 28px 0 30px',
+                borderRadius: 16,
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                background: 'rgba(255, 255, 255, 0.05)',
+                color: 'var(--text-main)',
+                fontSize: 12,
+                outline: 'none',
+              }}
             />
-            <span style={{ fontSize: '1.1em', fontWeight: activeTab === 'songs' ? 700 : 500 }}>歌曲</span>
-          </label>
-          <label className={`type-radio ${activeTab === 'artists' ? 'active' : ''}`}>
-            <input
-              type="radio"
-              name="favType"
-              checked={activeTab === 'artists'}
-              onChange={() => setActiveTab('artists')}
-              style={{ display: 'none' }}
-            />
-            <span style={{ fontSize: '1.1em', fontWeight: activeTab === 'artists' ? 700 : 500 }}>歌手</span>
-          </label>
-          <label className={`type-radio ${activeTab === 'playlists' ? 'active' : ''}`}>
-            <input
-              type="radio"
-              name="favType"
-              checked={activeTab === 'playlists'}
-              onChange={() => setActiveTab('playlists')}
-              style={{ display: 'none' }}
-            />
-            <span style={{ fontSize: '1.1em', fontWeight: activeTab === 'playlists' ? 700 : 500 }}>歌单</span>
-          </label>
+            {filterKeyword && (
+              <button
+                type="button"
+                onClick={() => setFilterKeyword('')}
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: 2,
+                  display: 'flex',
+                }}
+                title="清除筛选"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 24 }}>
+      <div
+        ref={scrollContainerRef}
+        onScroll={(e) => setShowBackTop(e.currentTarget.scrollTop > 200)}
+        style={{ flex: 1, overflowY: 'auto', marginTop: 16 }}
+      >
         <div className="glass-card" style={{ minHeight: '100%' }}>
           {activeTab === 'songs' ? (
-            favoriteSongs.length === 0 ? (
+            filteredSongs.length === 0 ? (
             <div style={{
               display: 'flex',
               flexDirection: 'column',
@@ -234,24 +313,26 @@ export const FavoritePanel: React.FC = () => {
               gap: 12
             }}>
               <Heart size={48} strokeWidth={1} style={{ color: '#ef4444' }} />
-              <p style={{ fontSize: 15 }}>暂无收藏歌曲</p>
-              <span style={{ fontSize: 11, color: 'var(--text-dark)' }}>点击播放栏的心形图标收藏喜欢的歌曲</span>
+              <p style={{ fontSize: 15 }}>{filterKeyword ? '未找到匹配的收藏歌曲' : '暂无收藏歌曲'}</p>
+              <span style={{ fontSize: 11, color: 'var(--text-dark)' }}>
+                {filterKeyword ? '请尝试更换筛选关键词' : '点击播放栏或列表的心形图标收藏喜欢的歌曲'}
+              </span>
             </div>
           ) : (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3>全部收藏 ({favoriteSongs.length})</h3>
+                <h3>{filterKeyword ? `筛选结果 (${filteredSongs.length})` : `全部收藏 (${filteredSongs.length})`}</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <button
                     className="song-row-action-btn"
-                    onClick={() => playAll(favoriteSongs)}
+                    onClick={() => playAll(filteredSongs)}
                     title="全部播放"
                   >
                     <Play size={14} fill="currentColor" />
                   </button>
                   <button
                     className="song-row-action-btn"
-                    onClick={() => addAllToPlaylist(favoriteSongs)}
+                    onClick={() => addAllToPlaylist(filteredSongs)}
                     title="全部加入播放列表"
                   >
                     <Plus size={14} />
@@ -259,55 +340,97 @@ export const FavoritePanel: React.FC = () => {
                 </div>
               </div>
               <div className="song-list-container">
-                {favoriteSongs.map((song, index) => (
-                  <div
-                    key={song.id}
-                    className="song-row"
-                    onDoubleClick={() => playSong(song)}
-                  >
-                    <div className="song-col-index">{(index + 1).toString().padStart(2, '0')}</div>
-                    <div className="song-col-info">
-                      <div className="song-title-row">
-                        <span className="song-name">{song.name}</span>
-                        <span className="tag-source">
-                          {song.isLocal ? '本地' : MUSIC_SOURCES.find(item => item.id === song.source)?.name || song.source}
+                {filteredSongs.map((song, index) => {
+                  const isCurrent = isSameSong(currentSong, song);
+                  return (
+                    <div
+                      key={song.id}
+                      className={`song-row song-row-playable ${isCurrent ? 'active' : ''}`}
+                      onClick={() => void playSong(song)}
+                      title="点击播放"
+                    >
+                      <div className="song-col-index">
+                        {isCurrent ? (
+                          <Play size={14} fill="var(--primary-color)" stroke="var(--primary-color)" />
+                        ) : (
+                          (index + 1).toString().padStart(2, '0')
+                        )}
+                      </div>
+                      <div className="song-col-info">
+                        <div className="song-title-row">
+                          <span className="song-name" style={{ color: isCurrent ? 'var(--primary-hover)' : 'inherit' }}>{song.name}</span>
+                          <span className="tag-source">
+                            {song.isLocal ? '本地' : MUSIC_SOURCES.find(item => item.id === song.source)?.name || song.source}
+                          </span>
+                        </div>
+                        <span
+                          className="song-artist clickable-artist"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
+                          }}
+                          title={`搜索歌手: ${song.artist}`}
+                        >
+                          {song.artist}
                         </span>
                       </div>
-                      <span className="song-artist">{song.artist}</span>
-                    </div>
-                    <div className="song-col-album">{song.album}</div>
-                    <div className="song-col-duration">{formatSecs(song.duration)}</div>
+                      <div className="song-col-album">
+                        {song.album && song.album !== '未知专辑' && song.album !== '-' ? (
+                          <span
+                            className="clickable-artist"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.dispatchEvent(new CustomEvent('openAlbum', {
+                                detail: {
+                                  albumId: '',
+                                  albumName: song.album,
+                                  artistName: song.artist,
+                                  source: song.source || 'netease',
+                                },
+                              }));
+                            }}
+                            title={`查看专辑: ${song.album}`}
+                            style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {song.album}
+                          </span>
+                        ) : (
+                          song.album || '-'
+                        )}
+                      </div>
+                      <div className="song-col-duration">{formatSecs(song.duration)}</div>
 
-                    <div className="song-row-actions">
-                      <button
-                        className="song-row-action-btn"
-                        onClick={() => playSong(song)}
-                        title="立即播放"
-                      >
-                        <Play size={14} fill="currentColor" />
-                      </button>
-                      <button
-                        className="song-row-action-btn"
-                        onClick={() => addToPlaylist(song)}
-                        title="添加到播放列表"
-                      >
-                        <Plus size={14} />
-                      </button>
-                      <button
-                        className="song-row-action-btn active"
-                        onClick={() => void toggleFavorite(song)}
-                        title="取消收藏"
-                        style={{ color: '#ef4444' }}
-                      >
-                        <Heart size={14} fill="#ef4444" color="#ef4444" />
-                      </button>
+                      <div className="song-row-actions" onClick={e => e.stopPropagation()}>
+                        <button
+                          className="song-row-action-btn"
+                          onClick={() => void playSong(song)}
+                          title="立即播放"
+                        >
+                          <Play size={14} fill="currentColor" />
+                        </button>
+                        <button
+                          className="song-row-action-btn"
+                          onClick={() => addToPlaylist(song)}
+                          title="设作下一首播放"
+                        >
+                          <Plus size={14} />
+                        </button>
+                        <button
+                          className="song-row-action-btn active"
+                          onClick={() => void toggleFavorite(song)}
+                          title="取消收藏"
+                          style={{ color: '#ef4444' }}
+                        >
+                          <Heart size={14} fill="#ef4444" color="#ef4444" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )) : activeTab === 'artists' ? (
-            favoriteArtists.length === 0 ? (
+            filteredArtists.length === 0 ? (
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -318,16 +441,16 @@ export const FavoritePanel: React.FC = () => {
                 gap: 12
               }}>
                 <Heart size={48} strokeWidth={1} style={{ color: '#ef4444' }} />
-                <p style={{ fontSize: 15 }}>暂无收藏歌手</p>
+                <p style={{ fontSize: 15 }}>{filterKeyword ? '未找到匹配的歌手' : '暂无收藏歌手'}</p>
                 <span style={{ fontSize: 11, color: 'var(--text-dark)' }}>搜索喜欢的歌手并收藏他们吧</span>
               </div>
             ) : (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h3>全部歌手 ({favoriteArtists.length})</h3>
+                  <h3>全部歌手 ({filteredArtists.length})</h3>
                 </div>
                 <div className="playlist-grid">
-                  {favoriteArtists.map(artist => (
+                  {filteredArtists.map(artist => (
                     <div key={artist.id} className="playlist-card" onClick={() => {
                       window.dispatchEvent(new CustomEvent('globalSearch', { detail: artist.name }));
                     }}>
@@ -341,7 +464,7 @@ export const FavoritePanel: React.FC = () => {
               </>
             )
           ) : (
-            favoritePlaylists.length === 0 ? (
+            filteredPlaylists.length === 0 ? (
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -352,17 +475,17 @@ export const FavoritePanel: React.FC = () => {
                 gap: 12
               }}>
                 <Heart size={48} strokeWidth={1} style={{ color: '#ef4444' }} />
-                <p style={{ fontSize: 15 }}>暂无收藏歌单</p>
+                <p style={{ fontSize: 15 }}>{filterKeyword ? '未找到匹配的歌单' : '暂无收藏歌单'}</p>
                 <span style={{ fontSize: 11, color: 'var(--text-dark)' }}>去在线音乐页面收藏一些歌单吧</span>
               </div>
             ) : (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                  <h3>全部歌单 ({favoritePlaylists.length})</h3>
+                  <h3>全部歌单 ({filteredPlaylists.length})</h3>
                 </div>
                 <div className="playlist-grid">
-                  {favoritePlaylists.map(pl => (
-                    <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id)}>
+                  {filteredPlaylists.map(pl => (
+                    <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id, pl.source)}>
                       <div className="playlist-cover-wrapper">
                         <CoverImage src={pl.coverImgUrl} alt="" className="playlist-card-cover" />
                         <div className="playlist-stats">
@@ -447,7 +570,7 @@ export const FavoritePanel: React.FC = () => {
                   outline: 'none',
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') handleSaveSyncCode();
+                  if (e.key === 'Enter') void handleSaveSyncCode();
                 }}
               />
               <button
@@ -504,7 +627,7 @@ export const FavoritePanel: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveSyncCode(false)}
+                onClick={() => void handleSaveSyncCode(false)}
                 style={{
                   padding: '9px 12px',
                   borderRadius: 8,
@@ -519,7 +642,7 @@ export const FavoritePanel: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => handleSaveSyncCode(true)}
+                onClick={() => void handleSaveSyncCode(true)}
                 title="保存暗号并自动拉取云端收藏进行同步"
                 style={{
                   flex: 1,

@@ -3,6 +3,7 @@ import { Play, Plus, Trash2, ArrowUp, Flame, Clock, ListPlus, Heart } from 'luci
 import { usePlayer } from '../context/PlayerContext';
 import type { Song } from '../types/music';
 import { MUSIC_SOURCES } from '../settings';
+import { isSameSong } from '../utils/songUtils';
 
 interface RecentItem {
   song: Song;
@@ -22,6 +23,7 @@ const sourceLabel = (song: Song) => {
 
 export const HistoryPanel: React.FC = () => {
   const {
+    currentSong,
     playHistory,
     playSong,
     playAll,
@@ -33,6 +35,7 @@ export const HistoryPanel: React.FC = () => {
   } = usePlayer();
 
   const [activeTab, setActiveTab] = useState<'recent' | 'top'>('recent');
+  const [showBackTop, setShowBackTop] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   /** 最近播放：按歌曲去重，保留最新一次播放时间（原始流水仍留给智能歌单/年报） */
@@ -55,7 +58,6 @@ export const HistoryPanel: React.FC = () => {
       const existing = countMap.get(entry.song.id);
       if (existing) {
         existing.count += 1;
-        // playedAt 保持最新（history 新在前，首次写入即为最新）
       } else {
         countMap.set(entry.song.id, {
           song: entry.song,
@@ -109,88 +111,128 @@ export const HistoryPanel: React.FC = () => {
     song: Song,
     index: number,
     meta: { playedAt?: number; count?: number; rank?: number },
-  ) => (
-    <div
-      key={song.id}
-      className="song-row"
-      role="button"
-      tabIndex={0}
-      onClick={() => void playSong(song)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          void playSong(song);
-        }
-      }}
-      style={{ cursor: 'pointer' }}
-    >
+  ) => {
+    const isCurrent = isSameSong(currentSong, song);
+    const isFav = isFavorite(song);
+
+    return (
       <div
-        className="song-col-index"
-        style={
-          activeTab === 'recent'
-            ? { fontSize: 11, color: 'var(--text-dark)', width: 70 }
-            : {
-                color: (meta.rank ?? index) < 3 ? '#ef4444' : 'var(--text-muted)',
-                fontWeight: (meta.rank ?? index) < 3 ? 700 : 400,
-              }
-        }
+        key={song.id}
+        className={`song-row song-row-playable ${isCurrent ? 'active' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => void playSong(song)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void playSong(song);
+          }
+        }}
+        style={{ cursor: 'pointer' }}
+        title="点击播放"
       >
-        {activeTab === 'recent'
-          ? formatDate(meta.playedAt || 0)
-          : ((meta.rank ?? index) + 1).toString().padStart(2, '0')}
-      </div>
-      <div className="song-col-info" style={{ flex: 1, minWidth: 0 }}>
-        <div className="song-title-row">
-          <span className="song-name">{song.name}</span>
-          <span className="tag-source">{sourceLabel(song)}</span>
+        <div
+          className="song-col-index"
+          style={
+            activeTab === 'recent'
+              ? { fontSize: 11, color: 'var(--text-dark)', width: 70 }
+              : {
+                  color: (meta.rank ?? index) < 3 ? '#ef4444' : 'var(--text-muted)',
+                  fontWeight: (meta.rank ?? index) < 3 ? 700 : 400,
+                }
+          }
+        >
+          {isCurrent ? (
+            <Play size={14} fill="var(--primary-color)" stroke="var(--primary-color)" />
+          ) : activeTab === 'recent' ? (
+            formatDate(meta.playedAt || 0)
+          ) : (
+            ((meta.rank ?? index) + 1).toString().padStart(2, '0')
+          )}
         </div>
-        <span className="song-artist">{song.artist}</span>
-      </div>
-      <div className="song-col-album">
-        {activeTab === 'top' && meta.count != null ? (
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
-            本周 {meta.count} 次
+        <div className="song-col-info" style={{ flex: 1, minWidth: 0 }}>
+          <div className="song-title-row">
+            <span className="song-name" style={{ color: isCurrent ? 'var(--primary-hover)' : 'inherit' }}>{song.name}</span>
+            <span className="tag-source">{sourceLabel(song)}</span>
+          </div>
+          <span
+            className="song-artist clickable-artist"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
+            }}
+            title={`搜索歌手: ${song.artist}`}
+          >
+            {song.artist}
           </span>
-        ) : (
-          song.album
-        )}
+        </div>
+        <div className="song-col-album">
+          {activeTab === 'top' && meta.count != null ? (
+            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+              本周 {meta.count} 次
+            </span>
+          ) : song.album && song.album !== '未知专辑' && song.album !== '-' ? (
+            <span
+              className="clickable-artist"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new CustomEvent('openAlbum', {
+                  detail: {
+                    albumId: '',
+                    albumName: song.album,
+                    artistName: song.artist,
+                    source: song.source || 'netease',
+                  },
+                }));
+              }}
+              title={`查看专辑: ${song.album}`}
+              style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {song.album}
+            </span>
+          ) : (
+            song.album || '-'
+          )}
+        </div>
+        <div className="song-col-duration">{formatTime(song.duration)}</div>
+        <div className="song-row-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="song-row-action-btn"
+            onClick={() => void playSong(song)}
+            title="立即播放"
+          >
+            <Play size={14} fill="currentColor" />
+          </button>
+          <button
+            className="song-row-action-btn"
+            onClick={() => addToPlaylist(song)}
+            title="设作下一首播放"
+          >
+            <Plus size={14} />
+          </button>
+          <button
+            className={`song-row-action-btn ${isFav ? 'active' : ''}`}
+            onClick={() => void toggleFavorite(song)}
+            title={isFav ? "取消收藏" : "收藏歌曲"}
+            style={isFav ? { color: '#ef4444' } : undefined}
+          >
+            <Heart size={14} fill={isFav ? '#ef4444' : 'none'} color={isFav ? '#ef4444' : 'currentColor'} />
+          </button>
+        </div>
       </div>
-      <div className="song-col-duration">{formatTime(song.duration)}</div>
-      <div className="song-row-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          className="song-row-action-btn"
-          onClick={() => void playSong(song)}
-          title="立即播放"
-        >
-          <Play size={14} fill="currentColor" />
-        </button>
-        <button
-          className="song-row-action-btn"
-          onClick={() => addToPlaylist(song)}
-          title="添加到播放列表"
-        >
-          <Plus size={14} />
-        </button>
-        <button
-          className={`song-row-action-btn ${isFavorite(song) ? 'active' : ''}`}
-          onClick={() => void toggleFavorite(song)}
-          title={isFavorite(song) ? "取消收藏" : "收藏歌曲"}
-          style={isFavorite(song) ? { color: '#ef4444' } : undefined}
-        >
-          <Heart size={14} fill={isFavorite(song) ? '#ef4444' : 'none'} color={isFavorite(song) ? '#ef4444' : 'currentColor'} />
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="glass-card" style={{ flexShrink: 0, padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-            <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
-              <ArrowUp size={18} />
-            </button>
+            {showBackTop && (
+              <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
+                <ArrowUp size={18} />
+              </button>
+            )}
             <Clock size={22} style={{ color: 'var(--primary-color)', flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <h2 style={{ fontSize: 16, margin: 0 }}>播放历史</h2>
@@ -270,7 +312,11 @@ export const HistoryPanel: React.FC = () => {
         </div>
       </div>
 
-      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}>
+      <div
+        ref={scrollContainerRef}
+        onScroll={(e) => setShowBackTop(e.currentTarget.scrollTop > 200)}
+        style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}
+      >
         <div className="glass-card" style={{ minHeight: '100%' }}>
           {activeTab === 'recent' ? (
             recentItems.length === 0 ? (

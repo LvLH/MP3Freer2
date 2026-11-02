@@ -157,18 +157,13 @@ export const PlayerBar: React.FC<PlayerBarProps> = ({ onToggleFullscreen, isLyri
             <span
               className={`player-title ${currentSong?.name && currentSong.name.length > 10 ? 'marquee-scroll' : ''}`}
               title={currentSong?.name || '未在播放'}
-              onClick={() => {
-                if (currentSong?.artist) {
-                  const firstArtist = currentSong.artist.split(/[/,&，、]/)[0].trim();
-                  if (firstArtist) triggerGlobalSearch(firstArtist);
-                }
-              }}
+              onClick={onToggleFullscreen}
               style={{ cursor: 'pointer' }}
             >
               {currentSong?.name || '听你想听的歌'}
             </span>
           </div>
-          <span className="player-artist" title={currentSong?.artist || 'MP3韬'}>
+          <span className="player-artist" title={currentSong?.artist || 'MP3Terry'}>
             {currentSong?.artist ? (
               currentSong.artist.split(/[/,&，、]/).map((a, i, arr) => {
                 const artistName = a.trim();

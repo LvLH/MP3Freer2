@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp, X } from 'lucide-react';
+import { ArrowLeft, Loader2, Play, Plus, Search, Music, Heart, ArrowUp, X, Clock, Trash2 } from 'lucide-react';
 import { MusicApiService, OnlinePlaylist, OnlineSong, PlaylistDetail } from '../services/musicApi';
 import { usePlayer, FavoriteArtist } from '../context/PlayerContext';
 import { useToast } from '../context/ToastContext';
 import { getDefaultSearchSource, setDefaultSearchSource, MUSIC_SOURCES, MusicSource } from '../settings';
-import { toPlayerSong } from '../utils/songUtils';
+import { toPlayerSong, isSameSong } from '../utils/songUtils';
 import { ArtistBanner } from './ArtistBanner';
 import { DiscoveryView } from './DiscoveryView';
 import { CoverImage } from './CoverImage';
 
 const PAGE_SIZE = 30;
+const SEARCH_HISTORY_KEY = 'mp3freer_search_history';
+const MAX_SEARCH_HISTORY = 12;
 
 const TEXT = {
   unknown: '\u672a\u77e5',
@@ -28,7 +30,7 @@ const TEXT = {
   playlistTag: '\u7f51\u6613\u4e91\u6b4c\u5355',
   creator: '\u521b\u5efa\u8005',
   playNow: '\u7acb\u5373\u64ad\u653e',
-  addQueue: '\u6dfb\u52a0\u5230\u64ad\u653e\u961f\u5217',
+  addQueue: '\u8bbe\u4f5c\u4e0b\u4e00\u9996\u64ad\u653e',
 };
 
 const formatCount = (count?: number) => {
@@ -39,7 +41,17 @@ const formatCount = (count?: number) => {
 };
 
 export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) => {
-  const { playSong, addToPlaylist, playAll, addAllToPlaylist, isFavoritePlaylist, toggleFavoritePlaylist, isFavorite, toggleFavorite } = usePlayer();
+  const {
+    currentSong,
+    playSong,
+    addToPlaylist,
+    playAll,
+    addAllToPlaylist,
+    isFavoritePlaylist,
+    toggleFavoritePlaylist,
+    isFavorite,
+    toggleFavorite,
+  } = usePlayer();
   const toast = useToast();
   const [keyword, setKeyword] = useState<string>('');
   const [activeKeyword, setActiveKeyword] = useState<string>('');
@@ -55,13 +67,54 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
   const [selectedPlaylist, setSelectedPlaylist] = useState<PlaylistDetail | null>(null);
   const [detailPage, setDetailPage] = useState<number>(1);
   const [playlistLoading, setPlaylistLoading] = useState<boolean>(false);
-  
+  const [showBackTop, setShowBackTop] = useState<boolean>(false);
+
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, MAX_SEARCH_HISTORY) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [matchedArtist, setMatchedArtist] = useState<FavoriteArtist | null>(null);
   const [currentSource, setCurrentSource] = useState<MusicSource>(getDefaultSearchSource);
-  
+
   const loadingMoreRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const saveSearchTerm = (term: string) => {
+    const cleaned = term.trim();
+    if (!cleaned) return;
+    setSearchHistory(prev => {
+      const next = [cleaned, ...prev.filter(item => item.toLowerCase() !== cleaned.toLowerCase())].slice(0, MAX_SEARCH_HISTORY);
+      try {
+        localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const removeHistoryItem = (term: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSearchHistory(prev => {
+      const next = prev.filter(item => item !== term);
+      try {
+        localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const clearSearchHistory = () => {
+    setSearchHistory([]);
+    try {
+      localStorage.removeItem(SEARCH_HISTORY_KEY);
+    } catch {}
+  };
 
   useEffect(() => {
     const handleFocusSearch = () => {
@@ -77,6 +130,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     const handleGlobalSearch = ((e: CustomEvent) => {
       const term = e.detail;
       if (!term) return;
+      saveSearchTerm(term);
       setKeyword(term);
       setSearchType('track');
       setLoading(true);
@@ -172,6 +226,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     setDefaultSearchSource(newSource);
     const term = (activeKeyword || keyword).trim();
     if (term) {
+      saveSearchTerm(term);
       setActiveKeyword(term);
       setLoading(true);
       setPage(1);
@@ -187,6 +242,39 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     }
   };
 
+  const handleSearchTypeChange = (nextType: 'track' | 'playlist') => {
+    if (nextType === searchType) return;
+    setSearchType(nextType);
+    const term = (keyword || activeKeyword).trim();
+    if (!term) return;
+
+    saveSearchTerm(term);
+    setLoading(true);
+    setSelectedPlaylist(null);
+    setActiveKeyword(term);
+    setPage(1);
+    setHasMore(false);
+    setPlaylistPage(1);
+    setPlaylistHasMore(false);
+    setDetailPage(1);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+
+    const task = nextType === 'track'
+      ? searchTracks(term, 1, false)
+      : searchPlaylistsPage(term, 1, false);
+
+    task
+      .catch((err: any) => {
+        console.error(err);
+        toast.error(`${TEXT.searchError}\n${err instanceof Error ? err.message : TEXT.unknownError}`);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
   const searchPlaylistsPage = async (term: string, targetPage: number, append: boolean) => {
     const results = await MusicApiService.searchPlaylists(term, targetPage);
     setPlaylistResults(prev => append ? [...prev, ...results] : results);
@@ -199,11 +287,12 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const term = keyword.trim();
+  const runSearchByTerm = async (rawTerm: string) => {
+    const term = rawTerm.trim();
     if (!term) return;
 
+    saveSearchTerm(term);
+    setKeyword(term);
     setLoading(true);
     setSelectedPlaylist(null);
     setActiveKeyword(term);
@@ -228,6 +317,11 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    await runSearchByTerm(keyword);
   };
 
   const loadMoreTracks = async () => {
@@ -263,6 +357,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
 
   const handleResultsScroll = (event: React.UIEvent<HTMLDivElement>) => {
     const target = event.currentTarget;
+    setShowBackTop(target.scrollTop > 200);
     const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
     if (distanceToBottom < 160) {
       if (selectedPlaylist) {
@@ -341,91 +436,105 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
 
   const renderSongList = (songs: OnlineSong[]) => (
     <div className="song-list-container">
-      {songs.map((song, index) => (
-        <div
-          key={`${song.source}_${song.id}`}
-          className="song-row song-row-playable"
-          onClick={() => playSong(toPlayerSong(song))}
-          title="点击播放"
-        >
-          <div className="song-col-index">{(index + 1).toString().padStart(2, '0')}</div>
-          <div className="song-col-info">
-            <div className="song-title-row">
-              <span className="song-name">{song.name}</span>
-              {song.has_hires && <span className="tag-hires">Hi-Res</span>}
-              <span className="tag-source">{sourceName(song.source)}</span>
+      {songs.map((song, index) => {
+        const playerSong = toPlayerSong(song);
+        const isCurrent = isSameSong(currentSong, playerSong);
+        const isFav = isFavorite(playerSong);
+
+        return (
+          <div
+            key={`${song.source}_${song.id}`}
+            className={`song-row song-row-playable ${isCurrent ? 'active' : ''}`}
+            onClick={() => void playSong(playerSong)}
+            title="点击播放"
+          >
+            <div className="song-col-index">
+              {isCurrent ? (
+                <Play size={14} fill="var(--primary-color)" stroke="var(--primary-color)" />
+              ) : (
+                (index + 1).toString().padStart(2, '0')
+              )}
             </div>
-            <span
-              className="song-artist clickable-artist"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
-              }}
-              title={`搜索歌手: ${song.artist}`}
-            >
-              {song.artist}
-            </span>
-          </div>
-          <div className="song-col-album">
-            {song.album && song.album !== '未知专辑' && song.album !== '-' ? (
+            <div className="song-col-info">
+              <div className="song-title-row">
+                <span className="song-name" style={{ color: isCurrent ? 'var(--primary-hover)' : 'inherit' }}>{song.name}</span>
+                {song.has_hires && <span className="tag-hires">Hi-Res</span>}
+                <span className="tag-source">{sourceName(song.source)}</span>
+              </div>
               <span
-                className="clickable-artist"
+                className="song-artist clickable-artist"
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.dispatchEvent(new CustomEvent('openAlbum', {
-                    detail: {
-                      albumId: song.albumId,
-                      albumName: song.album,
-                      artistName: song.artist,
-                      source: song.source
-                    }
-                  }));
+                  window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
                 }}
-                title={`查看专辑: ${song.album}`}
-                style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                title={`搜索歌手: ${song.artist}`}
               >
-                {song.album}
+                {song.artist}
               </span>
-            ) : (
-              song.album || '-'
-            )}
-          </div>
-          <div className="song-col-duration">{formatSecs(song.duration || 0)}</div>
-          <div className="song-row-actions" onClick={(e) => e.stopPropagation()}>
-            <button className="song-row-action-btn" onClick={() => playSong(toPlayerSong(song))} title={TEXT.playNow}>
-              <Play size={14} fill="currentColor" />
-            </button>
-            <button className="song-row-action-btn" onClick={() => addToPlaylist(toPlayerSong(song))} title={TEXT.addQueue}>
-              <Plus size={14} />
-            </button>
-            {(() => {
-              const playerSong = toPlayerSong(song);
-              const isFav = isFavorite(playerSong);
-              return (
-                <button
-                  className={`song-row-action-btn ${isFav ? 'active' : ''}`}
-                  onClick={() => void toggleFavorite(playerSong)}
-                  title={isFav ? "取消收藏" : "收藏歌曲"}
-                  style={isFav ? { color: '#ef4444' } : undefined}
+            </div>
+            <div className="song-col-album">
+              {song.album && song.album !== '未知专辑' && song.album !== '-' ? (
+                <span
+                  className="clickable-artist"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.dispatchEvent(new CustomEvent('openAlbum', {
+                      detail: {
+                        albumId: song.albumId,
+                        albumName: song.album,
+                        artistName: song.artist,
+                        source: song.source
+                      }
+                    }));
+                  }}
+                  title={`查看专辑: ${song.album}`}
+                  style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                 >
-                  <Heart size={14} fill={isFav ? '#ef4444' : 'none'} color={isFav ? '#ef4444' : 'currentColor'} />
-                </button>
-              );
-            })()}
+                  {song.album}
+                </span>
+              ) : (
+                song.album || '-'
+              )}
+            </div>
+            <div className="song-col-duration">{formatSecs(song.duration || 0)}</div>
+            <div className="song-row-actions" onClick={(e) => e.stopPropagation()}>
+              <button className="song-row-action-btn" onClick={() => void playSong(playerSong)} title={TEXT.playNow}>
+                <Play size={14} fill="currentColor" />
+              </button>
+              <button className="song-row-action-btn" onClick={() => addToPlaylist(playerSong)} title={TEXT.addQueue}>
+                <Plus size={14} />
+              </button>
+              <button
+                className={`song-row-action-btn ${isFav ? 'active' : ''}`}
+                onClick={() => void toggleFavorite(playerSong)}
+                title={isFav ? "取消收藏" : "收藏歌曲"}
+                style={isFav ? { color: '#ef4444' } : undefined}
+              >
+                <Heart size={14} fill={isFav ? '#ef4444' : 'none'} color={isFav ? '#ef4444' : 'currentColor'} />
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
+
+  const isSearchEmpty =
+    !loading &&
+    Boolean(activeKeyword) &&
+    ((searchType === 'track' && songResults.length === 0) ||
+      (searchType === 'playlist' && playlistResults.length === 0));
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="glass-card" style={{ flexShrink: 0 }}>
         <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="search-bar-row">
-            <button type="button" className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
-              <ArrowUp size={18} />
-            </button>
+            {showBackTop && (
+              <button type="button" className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
+                <ArrowUp size={18} />
+              </button>
+            )}
             <div className="search-input-wrap">
               <input
                 ref={searchInputRef}
@@ -475,7 +584,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                   type="radio"
                   name="searchType"
                   checked={searchType === 'track'}
-                  onChange={() => setSearchType('track')}
+                  onChange={() => handleSearchTypeChange('track')}
                   style={{ display: 'none' }}
                 />
                 <span>{TEXT.tracks}</span>
@@ -485,7 +594,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                   type="radio"
                   name="searchType"
                   checked={searchType === 'playlist'}
-                  onChange={() => setSearchType('playlist')}
+                  onChange={() => handleSearchTypeChange('playlist')}
                   style={{ display: 'none' }}
                 />
                 <span>{TEXT.playlists}</span>
@@ -509,6 +618,62 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
               </div>
             )}
           </div>
+
+          {/* 最近搜索历史胶囊 */}
+          {!activeKeyword && !selectedPlaylist && searchHistory.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingTop: 2 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', marginRight: 2 }}>
+                <Clock size={12} />
+                <span>最近:</span>
+              </span>
+              {searchHistory.map(item => (
+                <span
+                  key={item}
+                  onClick={() => void runSearchByTerm(item)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '3px 9px',
+                    borderRadius: 12,
+                    fontSize: 12,
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    color: 'var(--text-main)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                  title={`点击搜索: ${item}`}
+                >
+                  <span>{item}</span>
+                  <X
+                    size={11}
+                    style={{ opacity: 0.6 }}
+                    onClick={(e) => removeHistoryItem(item, e)}
+                  />
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={clearSearchHistory}
+                title="清空搜索历史"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  padding: '2px 4px',
+                }}
+              >
+                <Trash2 size={11} />
+                <span>清空</span>
+              </button>
+            </div>
+          )}
         </form>
       </div>
 
@@ -539,7 +704,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                         border: '1px solid rgba(168, 85, 247, 0.3)',
                       }}
                     >
-                      {selectedPlaylist.item[0]?.source === 'tencent' ? 'QQ' : '网易云'}
+                      {sourceName(selectedPlaylist.item[0]?.source || 'netease')}
                     </span>
                   </h2>
                 </div>
@@ -585,6 +750,35 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {isSearchEmpty && (
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', gap: 14, color: 'var(--text-muted)' }}>
+                <Search size={42} strokeWidth={1.2} style={{ color: 'var(--primary-color)', opacity: 0.8 }} />
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 15, color: 'var(--text-main)', margin: '0 0 6px 0' }}>
+                    在「{searchType === 'track' ? sourceName(currentSource) : '歌单库'}」中未搜到与 “{activeKeyword}” 相关的结果
+                  </p>
+                  <span style={{ fontSize: 12, color: 'var(--text-dark)' }}>
+                    {searchType === 'track' ? '不同音乐平台版权不同，点击下方其他音源即可一键切换重试：' : '请尝试简化搜索关键词'}
+                  </span>
+                </div>
+                {searchType === 'track' && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 4 }}>
+                    {MUSIC_SOURCES.filter(s => s.id !== currentSource).map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="source-tab"
+                        onClick={() => handleSourceChange(s.id)}
+                        style={{ padding: '6px 14px', fontSize: 12, borderRadius: 16 }}
+                      >
+                        切换到 {s.name} 搜索
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {(songResults.length > 0 || playlistResults.length > 0) && (
               <div className="glass-card" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -673,7 +867,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
                   <>
                     <div className="playlist-grid">
                       {playlistResults.map(pl => (
-                        <div key={pl.id} className="playlist-card" onClick={() => handlePlaylistClick(pl.id, true)}>
+                        <div key={pl.id} className="playlist-card" onClick={() => void handlePlaylistClick(pl.id, true)}>
                           <div className="playlist-cover-wrapper">
                             <CoverImage src={pl.cover} alt="" className="playlist-card-cover" />
                             <div className="playlist-stats">
@@ -704,7 +898,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             )}
             
             {/* 探索发现模块 */}
-            {!keyword && songResults.length === 0 && playlistResults.length === 0 && (
+            {!keyword && !activeKeyword && songResults.length === 0 && playlistResults.length === 0 && (
               <DiscoveryView active={active} />
             )}
             

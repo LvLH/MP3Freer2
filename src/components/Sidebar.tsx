@@ -62,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
         <div className="logo-icon">
           <Disc size={18} className="spinning" />
         </div>
-        <span className="logo-title">MP3韬</span>
+        <span className="logo-title">MP3Terry</span>
       </div>
 
       {/* 桌面与车机宽屏导航列表 */}
@@ -102,35 +102,39 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onOpe
         </li>
       </ul>
 
-      {/* 移动端专属 4 核心 Tab 底部栏 */}
+      {/* 移动端专属 4 核心 Tab 底部栏（纯图标，不显示文字） */}
       <ul className="nav-menu mobile-nav-menu">
         <li
           className={`nav-item ${activeTab === 'search' ? 'active' : ''}`}
           onClick={() => setActiveTab('search')}
+          title="发现"
+          aria-label="发现"
         >
-          <Search size={20} />
-          <span>发现</span>
+          <Search size={22} />
         </li>
         <li
-          className={`nav-item ${['my', 'local', 'favorites', 'history', 'smart'].includes(activeTab) ? 'active' : ''}`}
+          className={`nav-item ${['my', 'favorites', 'history'].includes(activeTab) ? 'active' : ''}`}
           onClick={() => setActiveTab('my')}
+          title="我的"
+          aria-label="我的"
         >
-          <Music size={20} />
-          <span>我的</span>
+          <Music size={22} />
         </li>
         <li
           className={`nav-item ${activeTab === 'playlist' ? 'active' : ''}`}
           onClick={() => setActiveTab('playlist')}
+          title="播放队列"
+          aria-label="播放队列"
         >
-          <ListMusic size={20} />
-          <span>播放</span>
+          <ListMusic size={22} />
         </li>
         <li
           className={`nav-item ${activeTab === 'about' ? 'active' : ''}`}
           onClick={() => setActiveTab('about')}
+          title="设置"
+          aria-label="设置"
         >
-          <Settings size={20} />
-          <span>设置</span>
+          <Settings size={22} />
         </li>
       </ul>
     </aside>

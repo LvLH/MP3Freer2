@@ -1,14 +1,26 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Play, Trash2, Music, ArrowUp } from 'lucide-react';
+import { Play, Trash2, Music, ArrowUp, Heart } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
+import { isSameSong } from '../utils/songUtils';
 
 export const PlaylistPanel: React.FC = () => {
-  const { playlist, playIndex, currentSong, playSong, removeFromPlaylist, clearPlaylist } = usePlayer();
+  const {
+    playlist,
+    playIndex,
+    currentSong,
+    playSong,
+    removeFromPlaylist,
+    clearPlaylist,
+    isFavorite,
+    toggleFavorite,
+  } = usePlayer();
+
+  const [showBackTop, setShowBackTop] = useState(false);
 
   const formatSecs = (secs: number) => {
     if (!secs) return '00:00';
     const m = Math.floor(secs / 60);
-    const s = secs % 60;
+    const s = Math.floor(secs % 60);
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
@@ -73,9 +85,11 @@ export const PlaylistPanel: React.FC = () => {
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="glass-card" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
-            <ArrowUp size={18} />
-          </button>
+          {showBackTop && (
+            <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
+              <ArrowUp size={18} />
+            </button>
+          )}
           <div>
             <h2>正在播放列表</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>
@@ -101,7 +115,11 @@ export const PlaylistPanel: React.FC = () => {
         )}
       </div>
 
-      <div ref={scrollContainerRef} style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}>
+      <div
+        ref={scrollContainerRef}
+        onScroll={(e) => setShowBackTop(e.currentTarget.scrollTop > 200)}
+        style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}
+      >
         <div className="glass-card" style={{ minHeight: '100%' }}>
           {playlist.length === 0 ? (
             <div style={{ 
@@ -120,9 +138,10 @@ export const PlaylistPanel: React.FC = () => {
           ) : (
             <div className="song-list-container playlist-queue-container">
               {playlist.map((song, index) => {
-                const isCurrent = currentSong?.id === song.id;
+                const isCurrent = isSameSong(currentSong, song);
                 const isSwiped = swipedSongId === song.id;
                 const isDeleting = deletingSongId === song.id;
+                const isFav = isFavorite(song);
 
                 return (
                   <div
@@ -133,7 +152,7 @@ export const PlaylistPanel: React.FC = () => {
                       className={`song-row queue-song-row ${isCurrent ? 'active' : ''} ${isSwiped ? 'swiped' : ''}`}
                       onTouchStart={handleTouchStart}
                       onTouchMove={e => handleTouchMove(e, song.id)}
-                      onClick={() => playSong(song)}
+                      onClick={() => void playSong(song)}
                     >
                       <div className="song-col-index">
                         {isCurrent ? (
@@ -148,10 +167,59 @@ export const PlaylistPanel: React.FC = () => {
                             {song.name}
                           </span>
                         </div>
-                        <span className="song-artist" title={song.artist}>{song.artist}</span>
+                        <span
+                          className="song-artist clickable-artist"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.dispatchEvent(new CustomEvent('globalSearch', { detail: song.artist }));
+                          }}
+                          title={`搜索歌手: ${song.artist}`}
+                        >
+                          {song.artist}
+                        </span>
                       </div>
-                      <div className="song-col-album">{song.album}</div>
+                      <div className="song-col-album">
+                        {song.album && song.album !== '未知专辑' && song.album !== '-' ? (
+                          <span
+                            className="clickable-artist"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.dispatchEvent(new CustomEvent('openAlbum', {
+                                detail: {
+                                  albumId: '',
+                                  albumName: song.album,
+                                  artistName: song.artist,
+                                  source: song.source || 'netease',
+                                },
+                              }));
+                            }}
+                            title={`查看专辑: ${song.album}`}
+                            style={{ display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {song.album}
+                          </span>
+                        ) : (
+                          song.album || '-'
+                        )}
+                      </div>
                       <div className="song-col-duration">{formatSecs(song.duration)}</div>
+                      <div className="song-row-actions" onClick={e => e.stopPropagation()}>
+                        <button
+                          className={`song-row-action-btn ${isFav ? 'active' : ''}`}
+                          onClick={() => void toggleFavorite(song)}
+                          title={isFav ? '取消收藏' : '收藏歌曲'}
+                          style={isFav ? { color: '#ef4444' } : undefined}
+                        >
+                          <Heart size={14} fill={isFav ? '#ef4444' : 'none'} color={isFav ? '#ef4444' : 'currentColor'} />
+                        </button>
+                        <button
+                          className="song-row-action-btn"
+                          onClick={(e) => handleDeleteSong(e, song.id)}
+                          title="从播放列表中移除"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                     {isSwiped && (
                       <button

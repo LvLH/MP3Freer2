@@ -510,7 +510,7 @@ export function exportFavoritesToFile(favorites: {
     const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const dateStr = new Date().toISOString().slice(0, 10);
-    const filename = `MP3Tao_收藏备份_${syncCode}_${dateStr}.json`;
+    const filename = `MP3Terry_收藏备份_${syncCode}_${dateStr}.json`;
 
     const a = document.createElement('a');
     a.href = url;

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ListMusic, SkipBack, SkipForward, Play, Pause, ArrowLeftRight, Trash2 } from 'lucide-react';
+import { ChevronDown, ListMusic, SkipBack, SkipForward, Play, Pause, ArrowLeftRight, Trash2, Heart, Repeat, Repeat1, Shuffle } from 'lucide-react';
 import { usePlayer } from '../context/PlayerContext';
 import { usePlaybackProgress } from '../services/playbackProgress';
 import { isMobileShell } from '../utils/platform';
@@ -15,6 +15,7 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
     currentSong, lyrics, currentLyricIndex, seekTo,
     playlist, playIndex, playSong, togglePlay, prevSong, nextSong,
     showTranslation, removeFromPlaylist, isLoading,
+    isFavorite, toggleFavorite, playMode, changePlayMode,
   } = usePlayer();
   // 播放进度/状态走独立 store，避免随 usePlayer 的其它字段一起重渲染
   const { currentTime, duration, isPlaying } = usePlaybackProgress();
@@ -23,6 +24,26 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const playlistSheetListRef = useRef<HTMLDivElement | null>(null);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
+
+  const isCurrentFav = Boolean(currentSong && isFavorite(currentSong));
+
+  const getPlayModeTitle = () => {
+    switch (playMode) {
+      case 'single-loop':
+        return '单曲循环';
+      case 'random':
+        return '随机播放';
+      case 'list-loop':
+      default:
+        return '列表循环';
+    }
+  };
+
+  const renderPlayModeIcon = (size = 20) => {
+    if (playMode === 'single-loop') return <Repeat1 size={size} style={{ color: 'var(--primary-color)' }} />;
+    if (playMode === 'random') return <Shuffle size={size} style={{ color: 'var(--primary-color)' }} />;
+    return <Repeat size={size} />;
+  };
 
   // 歌词界面工具按钮对齐位置（'left' | 'right'），带 localStorage 持久化记忆
   const [buttonAlign, setButtonAlign] = useState<'left' | 'right'>(() => {
@@ -136,15 +157,12 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
     if (!isOpen || !containerRef.current || currentLyricIndex < 0) return;
     if (typeof document !== 'undefined' && document.hidden) return;
 
-    // 用 rAF 确保在 DOM 更新（active class 切换）之后再滚动，
-    // 避免 querySelector 找到的是旧的 active 元素
     const raf = requestAnimationFrame(() => {
       const container = containerRef.current;
       if (!container) return;
       const activeEl = container.querySelector('.lyric-line.active') as HTMLElement;
       if (!activeEl) return;
       const targetTop = activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
-      // scrollTo + behavior:smooth 比 scrollTop 直接赋值更可靠地触发平滑滚动
       container.scrollTo({ top: targetTop, behavior: 'smooth' });
     });
     return () => cancelAnimationFrame(raf);
@@ -281,14 +299,35 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
           <span className="lyric-song-artist">{currentSong?.artist || '未知歌手'}</span>
         </div>
 
-        <button 
-          ref={btnRef}
-          className="lyric-playlist-btn"
-          onClick={() => setIsPlaylistOpen(!isPlaylistOpen)}
-          title="当前播放列表"
-        >
-          <ListMusic size={20} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 18 }}>
+          <button
+            className="lyric-playlist-btn"
+            style={{ marginTop: 0, color: isCurrentFav ? '#ef4444' : undefined }}
+            onClick={() => currentSong && void toggleFavorite(currentSong)}
+            title={isCurrentFav ? '取消收藏' : '收藏歌曲'}
+          >
+            <Heart size={20} fill={isCurrentFav ? '#ef4444' : 'none'} />
+          </button>
+
+          <button
+            className="lyric-playlist-btn"
+            style={{ marginTop: 0 }}
+            onClick={changePlayMode}
+            title={getPlayModeTitle()}
+          >
+            {renderPlayModeIcon(20)}
+          </button>
+
+          <button 
+            ref={btnRef}
+            className="lyric-playlist-btn"
+            style={{ marginTop: 0 }}
+            onClick={() => setIsPlaylistOpen(!isPlaylistOpen)}
+            title="当前播放列表"
+          >
+            <ListMusic size={20} />
+          </button>
+        </div>
 
         {isPlaylistOpen && (
           <div className="lyric-playlist-popup" ref={popupRef}>
@@ -338,12 +377,13 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
           )}
         </div>
 
-
-
-        {/* 移动端专属底部控制栏（纯粹控制按钮区）- 仅移动端环境渲染 */}
+        {/* 移动端专属底部控制栏（含播放模式、上一首、播放/暂停、下一首、红心收藏）- 仅移动端环境渲染 */}
         {isMobileShell() && (
           <div className="mobile-lyric-bottom-bar">
             <div className="mobile-lyric-btns">
+              <button className="mobile-lyric-ctrl-btn" onClick={changePlayMode} title={getPlayModeTitle()}>
+                {renderPlayModeIcon(22)}
+              </button>
               <button className="mobile-lyric-ctrl-btn" onClick={prevSong} title="上一首">
                 <SkipBack size={24} />
               </button>
@@ -352,6 +392,14 @@ export const LyricView: React.FC<LyricViewProps> = ({ isOpen, onClose }) => {
               </button>
               <button className="mobile-lyric-ctrl-btn" onClick={nextSong} title="下一首">
                 <SkipForward size={24} />
+              </button>
+              <button
+                className="mobile-lyric-ctrl-btn"
+                onClick={() => currentSong && void toggleFavorite(currentSong)}
+                title={isCurrentFav ? '取消收藏' : '收藏'}
+                style={{ color: isCurrentFav ? '#ef4444' : undefined }}
+              >
+                <Heart size={22} fill={isCurrentFav ? '#ef4444' : 'none'} />
               </button>
             </div>
           </div>

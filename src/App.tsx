@@ -41,11 +41,17 @@ function MainLayout() {
   });
 
   useEffect(() => {
-    const handleGlobalSearch = () => {
+    const switchToSearch = () => {
       setActiveTab('search');
     };
-    window.addEventListener('globalSearch', handleGlobalSearch);
-    return () => window.removeEventListener('globalSearch', handleGlobalSearch);
+    window.addEventListener('globalSearch', switchToSearch);
+    window.addEventListener('openAlbum', switchToSearch);
+    window.addEventListener('openPlaylist', switchToSearch);
+    return () => {
+      window.removeEventListener('globalSearch', switchToSearch);
+      window.removeEventListener('openAlbum', switchToSearch);
+      window.removeEventListener('openPlaylist', switchToSearch);
+    };
   }, []);
 
   useEffect(() => {

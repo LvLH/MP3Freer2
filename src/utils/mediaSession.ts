@@ -37,7 +37,7 @@ function syncToAndroidNative() {
       } else {
         window.AndroidMediaBridge.updateMedia(
           lastSongCache.name || '未知曲目',
-          lastSongCache.artist || 'MP3Freer',
+          lastSongCache.artist || 'MP3Terry',
           lastSongCache.pic || '',
           lastIsPlayingCache,
           lastDurationCache || (lastSongCache.duration || 0),
@@ -85,7 +85,7 @@ export function updateMediaSessionMetadata(song: Song | null): void {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: song.name || '未知歌曲',
       artist: song.artist || '未知歌手',
-      album: song.album || 'MP3Freer',
+      album: song.album || 'MP3Terry',
       artwork: artwork.length > 0 ? artwork : undefined,
     });
   } catch (err) {

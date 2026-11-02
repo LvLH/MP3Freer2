@@ -1273,20 +1273,55 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const addToPlaylist = (song: Song, playImmediately = false) => {
     const pl = playlistRef.current;
-    const idx = pl.findIndex(s => s.id === song.id);
-    if (idx >= 0) {
-      if (playImmediately) {
-        playSongAtIndex(idx);
+    const currentIdx = playIndexRef.current;
+    const existingIdx = pl.findIndex(s => isSameSong(s, song));
+
+    if (playImmediately) {
+      if (existingIdx >= 0) {
+        playSongAtIndex(existingIdx);
+        return;
       }
+      const newPlaylist = [...pl, song];
+      playlistRef.current = newPlaylist;
+      setPlaylist(newPlaylist);
+      playSongAtIndex(newPlaylist.length - 1, { forceReplay: true });
       return;
     }
 
-    const newPlaylist = [...pl, song];
-    playlistRef.current = newPlaylist;
-    setPlaylist(newPlaylist);
-    if (playImmediately) {
-      playSongAtIndex(newPlaylist.length - 1, { forceReplay: true });
+    if (pl.length === 0 || currentIdx < 0) {
+      const newPlaylist = [song];
+      playlistRef.current = newPlaylist;
+      setPlaylist(newPlaylist);
+      playSongAtIndex(0, { forceReplay: true });
+      toast.info('已添加并开始播放：' + song.name);
+      return;
     }
+
+    if (existingIdx === currentIdx) {
+      toast.info('当前正在播放：' + song.name);
+      return;
+    }
+
+    const nextPlaylist = [...pl];
+    let newCurrentIdx = currentIdx;
+
+    if (existingIdx >= 0) {
+      nextPlaylist.splice(existingIdx, 1);
+      if (existingIdx < currentIdx) {
+        newCurrentIdx -= 1;
+      }
+    }
+
+    const insertPos = Math.min(nextPlaylist.length, newCurrentIdx + 1);
+    nextPlaylist.splice(insertPos, 0, song);
+
+    playlistRef.current = nextPlaylist;
+    setPlaylist(nextPlaylist);
+    if (newCurrentIdx !== currentIdx) {
+      playIndexRef.current = newCurrentIdx;
+      setPlayIndex(newCurrentIdx);
+    }
+    toast.info('已设作下一首播放：' + song.name);
   };
 
   const removeFromPlaylist = (songId: string) => {
@@ -1337,10 +1372,12 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const addAllToPlaylist = (songs: Song[]) => {
     if (songs.length === 0) return;
     setPlaylist(prev => {
-      const existingIds = new Set(prev.map(s => s.id));
-      const newSongs = songs.filter(s => !existingIds.has(s.id));
-      return [...prev, ...newSongs];
+      const newSongs = songs.filter(s => !prev.some(item => isSameSong(item, s)));
+      const next = [...prev, ...newSongs];
+      playlistRef.current = next;
+      return next;
     });
+    toast.info('已将 ' + songs.length + ' 首歌曲加入播放队列');
   };
 
   const isFavorite = (songOrId: Song | string | null | undefined): boolean => {

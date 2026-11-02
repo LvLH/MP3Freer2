@@ -1,20 +1,18 @@
 import React, { useState } from 'react';
-import { Heart, History, Sparkles, BarChart3 } from 'lucide-react';
+import { Heart, History, BarChart3 } from 'lucide-react';
 import { FavoritePanel } from './FavoritePanel';
 import { HistoryPanel } from './HistoryPanel';
-import { SmartPlaylistsPanel } from './SmartPlaylistsPanel';
 
 interface MyMusicMobilePanelProps {
   onOpenReport: () => void;
 }
 
 export const MyMusicMobilePanel: React.FC<MyMusicMobilePanelProps> = ({ onOpenReport }) => {
-  const [subTab, setSubTab] = useState<'favorites' | 'history' | 'smart'>('favorites');
+  const [subTab, setSubTab] = useState<'favorites' | 'history'>('favorites');
 
   const subTabs = [
     { id: 'favorites' as const, label: '我的收藏', icon: Heart },
     { id: 'history' as const, label: '播放历史', icon: History },
-    { id: 'smart' as const, label: '智能歌单', icon: Sparkles },
   ];
 
   return (
@@ -51,7 +49,6 @@ export const MyMusicMobilePanel: React.FC<MyMusicMobilePanelProps> = ({ onOpenRe
       <div style={{ flex: 1, minHeight: 0, width: '100%' }}>
         {subTab === 'favorites' && <FavoritePanel />}
         {subTab === 'history' && <HistoryPanel />}
-        {subTab === 'smart' && <SmartPlaylistsPanel />}
       </div>
     </div>
   );
