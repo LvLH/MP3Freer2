@@ -110,7 +110,7 @@ export const FavoritePanel: React.FC = () => {
         accept=".json"
         style={{ display: 'none' }}
       />
-      <div className="glass-card" style={{ flexShrink: 0 }}>
+      <div className="glass-card panel-header-card" style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {showBackTop && (
@@ -217,7 +217,7 @@ export const FavoritePanel: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
           <div className="type-selectors" style={{ margin: 0 }}>
             <label className={`type-radio ${activeTab === 'songs' ? 'active' : ''}`}>
               <input
@@ -251,7 +251,7 @@ export const FavoritePanel: React.FC = () => {
             </label>
           </div>
 
-          <div style={{ position: 'relative', minWidth: 180, flex: '0 1 240px' }}>
+          <div style={{ position: 'relative', minWidth: 150, flex: '1 1 180px', maxWidth: 260 }}>
             <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
             <input
               type="text"
@@ -297,6 +297,7 @@ export const FavoritePanel: React.FC = () => {
 
       <div
         ref={scrollContainerRef}
+        className="panel-scroll-area"
         onScroll={(e) => setShowBackTop(e.currentTarget.scrollTop > 200)}
         style={{ flex: 1, overflowY: 'auto', marginTop: 16 }}
       >

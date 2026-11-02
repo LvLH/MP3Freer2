@@ -83,7 +83,7 @@ export const PlaylistPanel: React.FC = () => {
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="glass-card" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="glass-card panel-header-card" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {showBackTop && (
             <button className="back-to-top-btn" onClick={scrollToTop} title="回到顶部">
@@ -117,6 +117,7 @@ export const PlaylistPanel: React.FC = () => {
 
       <div
         ref={scrollContainerRef}
+        className="panel-scroll-area"
         onScroll={(e) => setShowBackTop(e.currentTarget.scrollTop > 200)}
         style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}
       >

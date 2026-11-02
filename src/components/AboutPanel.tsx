@@ -91,7 +91,7 @@ export const AboutPanel: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+    <div className="about-panel-root" style={{ display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
       <div className="glass-card" style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
         <div className="about-logo-wrapper">
           <Disc size={32} className="spinning" style={{ color: 'white' }} />
@@ -199,10 +199,10 @@ export const AboutPanel: React.FC = () => {
                       onChange={() => handleEndpointToggle(info.url)}
                       style={{ accentColor: '#10b981', width: 16, height: 16, marginTop: 2 }}
                     />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 600 }}>{info.name}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{info.url}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{info.url}</span>
                       </div>
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{info.desc}</span>
                     </div>

@@ -225,7 +225,7 @@ export const HistoryPanel: React.FC = () => {
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="glass-card" style={{ flexShrink: 0, padding: '14px 16px' }}>
+      <div className="glass-card panel-header-card" style={{ flexShrink: 0, padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
             {showBackTop && (
@@ -314,6 +314,7 @@ export const HistoryPanel: React.FC = () => {
 
       <div
         ref={scrollContainerRef}
+        className="panel-scroll-area"
         onScroll={(e) => setShowBackTop(e.currentTarget.scrollTop > 200)}
         style={{ flex: 1, overflowY: 'auto', marginTop: 12 }}
       >

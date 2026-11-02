@@ -182,7 +182,7 @@ export const DiscoveryView: React.FC<{ active?: boolean }> = ({ active = true })
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 36, padding: '20px 0', animation: 'fadeIn 0.5s ease' }}>
+    <div className="discovery-view-root" style={{ display: 'flex', flexDirection: 'column', gap: 36, padding: '20px 0', animation: 'fadeIn 0.5s ease' }}>
       
       {/* 精品歌单：多拉一批 + 打乱展示；可换一批 */}
       {hqPlaylists.length > 0 && (

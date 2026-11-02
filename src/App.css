@@ -2575,14 +2575,54 @@ body.is-desktop .mobile-playlist-sheet-overlay,
     justify-content: center;
   }
 
-  /* ---------------- 中间主内容滚动区（顶部状态栏安全区避让） ---------------- */
+  /* ---------------- 中间主内容滚动区（顶部状态栏安全区避让，通栏窄边距） ---------------- */
   .main-content {
     width: 100vw;
     height: calc(100vh - var(--mobile-nav-height) - var(--player-height) - env(safe-area-inset-bottom, 0px) - 12px);
     flex: none;
-    padding: calc(env(safe-area-inset-top, 24px) + 8px) 12px 20px 12px;
+    padding: calc(env(safe-area-inset-top, 24px) + 6px) 6px 16px 6px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* 移动端去掉模块卡片边框与大边距，通栏平铺最大化显示空间 */
+  .glass-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 4px 2px !important;
+  }
+  .panel-header-card {
+    padding-bottom: 8px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  }
+  .panel-scroll-area {
+    margin-top: 6px !important;
+  }
+  .discovery-view-root {
+    gap: 18px !important;
+    padding: 6px 0 !important;
+  }
+  .about-panel-root {
+    gap: 12px !important;
+  }
+  .toplist-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  .toplist-card.glass-card {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 12px !important;
+    padding: 10px !important;
+  }
+  .toplist-info {
+    margin-left: 10px !important;
+  }
+  .song-list-container {
+    margin-top: 6px !important;
+    gap: 4px !important;
   }
 
   /* 移动端卡片头部标题缩小 */
@@ -2606,8 +2646,8 @@ body.is-desktop .mobile-playlist-sheet-overlay,
     display: flex !important;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 4px 6px 12px 6px;
+    gap: 6px;
+    padding: 2px 2px 8px 2px;
     flex-shrink: 0;
   }
 
@@ -2664,18 +2704,15 @@ body.is-desktop .mobile-playlist-sheet-overlay,
   .song-row {
     display: flex !important;
     align-items: center;
-    padding: 11px 8px;
-    gap: 8px;
-    border-radius: 10px;
+    padding: 8px 4px !important;
+    gap: 6px !important;
+    border-radius: 8px;
     cursor: pointer;
   }
 
+  /* 移动端全局隐藏序号列，把横向空间全部让给歌名与歌手 */
   .song-col-index {
-    width: 24px;
-    font-size: 12px;
-    color: var(--text-muted);
-    text-align: center;
-    flex-shrink: 0;
+    display: none !important;
   }
 
   .song-col-info,
@@ -2729,20 +2766,21 @@ body.is-desktop .mobile-playlist-sheet-overlay,
   .song-row-actions {
     display: flex !important;
     align-items: center;
-    gap: 6px;
+    gap: 4px !important;
+    margin-left: 4px !important;
     flex-shrink: 0;
     opacity: 1 !important;
   }
 
   .song-row-action-btn {
-    width: 44px !important;
-    height: 44px !important;
+    width: 34px !important;
+    height: 34px !important;
     padding: 0 !important;
     display: flex;
     align-items: center;
     justify-content: center;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
+    border-radius: 8px;
     border: none;
     color: var(--text-muted);
   }
@@ -2996,8 +3034,8 @@ body.is-desktop .mobile-playlist-sheet-overlay,
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 12px 8px;
+    gap: 6px;
+    padding: 8px 4px;
     cursor: pointer;
     min-width: 0;
     transition: transform 0.25s ease;
@@ -3254,14 +3292,8 @@ body.is-desktop .mobile-playlist-sheet-overlay,
 
 /* ============ 超小屏手机（≤400px）进一步释放歌名区横向空间 ============ */
 @media (max-width: 400px) {
-  /* 隐藏序号列，把空间全部让给歌名/歌手 */
   .song-col-index {
     display: none !important;
-  }
-
-  /* 序号隐藏后歌名区从列表最左开始，补一点左内边距 */
-  .song-row {
-    padding-left: 12px;
   }
 }
 

@@ -527,7 +527,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
 
   return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="glass-card" style={{ flexShrink: 0 }}>
+      <div className="glass-card panel-header-card" style={{ flexShrink: 0 }}>
         <form onSubmit={handleSearch} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="search-bar-row">
             {showBackTop && (
@@ -749,7 +749,7 @@ export const SearchPanel: React.FC<{ active?: boolean }> = ({ active = true }) =
             )}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {isSearchEmpty && (
               <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 20px', gap: 14, color: 'var(--text-muted)' }}>
                 <Search size={42} strokeWidth={1.2} style={{ color: 'var(--primary-color)', opacity: 0.8 }} />
