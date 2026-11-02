@@ -3790,6 +3790,141 @@ body.is-desktop .mobile-playlist-sheet-overlay,
   }
 }
 
+/* ============ 歌手分类页面 & 歌手单行列表（对标网易云APP） ============ */
+.artist-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  overflow-x: auto;
+  padding: 4px 2px;
+  scrollbar-width: none;
+}
+
+.artist-filter-tab {
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  border-radius: 12px;
+}
+
+.artist-filter-tab:hover {
+  color: var(--text-main);
+}
+
+.artist-filter-tab.active {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+/* 热门歌手小分区条（截图浅灰色条） */
+.artist-section-bar {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+/* 歌手列表容器 */
+.artist-list-container {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 歌手单行 */
+.artist-list-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border-radius: 8px;
+}
+
+.artist-list-row:last-child {
+  border-bottom: none;
+}
+
+.artist-list-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.artist-avatar-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  margin-right: 14px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.artist-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.artist-info-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.artist-name-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 红色药丸胶囊关注按钮（对标截图红框） */
+.artist-follow-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 13px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #ef4444;
+  background: transparent;
+  color: #ef4444;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.artist-follow-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  transform: scale(1.02);
+}
+
+.artist-follow-btn:active {
+  transform: scale(0.96);
+}
+
+.artist-follow-btn.followed {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+
 
 
 

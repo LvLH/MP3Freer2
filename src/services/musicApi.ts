@@ -1234,13 +1234,14 @@ export const MusicApiService = {
     limit?: number;
     offset?: number;
   } = {}): Promise<any[]> {
-    const area = options.area ?? -1;
+    const area = options.area ?? 7;
     const type = options.type ?? -1;
     const initial = options.initial ?? '-1';
     const limit = options.limit ?? 60;
     const offset = options.offset ?? 0;
     try {
-      const response = await universalFetch('https://music.163.com/api/artist/list', {
+      // 优先尝试网易云标准 v1 接口
+      const response = await universalFetch('https://music.163.com/api/v1/artist/list', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -1249,20 +1250,48 @@ export const MusicApiService = {
         },
         body: `limit=${limit}&offset=${offset}&type=${type}&area=${area}&initial=${encodeURIComponent(initial)}`
       });
-      if (!response.ok) return [];
-      const data = await response.json();
-      if (data.code === 200 && Array.isArray(data.artists)) {
-        return data.artists.map((item: any) => ({
-          id: String(item.id),
-          name: item.name,
-          picUrl: resolveImageUrl(item.picUrl, item.img1v1Url) || '',
-          musicSize: item.musicSize,
-          albumSize: item.albumSize,
-          trans: item.trans || '',
-        }));
+      if (response.ok) {
+        const data = await response.json();
+        if (data.code === 200 && Array.isArray(data.artists) && data.artists.length > 0) {
+          return data.artists.map((item: any) => ({
+            id: String(item.id),
+            name: item.name,
+            picUrl: resolveImageUrl(item.picUrl, item.img1v1Url) || '',
+            musicSize: item.musicSize,
+            albumSize: item.albumSize,
+            trans: item.trans || '',
+          }));
+        }
       }
     } catch (err) {
-      console.warn('Failed to fetch artist list:', err);
+      console.warn('Failed to fetch v1 artist list, trying fallback:', err);
+    }
+
+    try {
+      const fallbackRes = await universalFetch('https://music.163.com/api/artist/list', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Referer': 'https://music.163.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        body: `limit=${limit}&offset=${offset}&type=${type}&area=${area}&initial=${encodeURIComponent(initial)}`
+      });
+      if (fallbackRes.ok) {
+        const fbData = await fallbackRes.json();
+        if (fbData.code === 200 && Array.isArray(fbData.artists)) {
+          return fbData.artists.map((item: any) => ({
+            id: String(item.id),
+            name: item.name,
+            picUrl: resolveImageUrl(item.picUrl, item.img1v1Url) || '',
+            musicSize: item.musicSize,
+            albumSize: item.albumSize,
+            trans: item.trans || '',
+          }));
+        }
+      }
+    } catch (fbErr) {
+      console.warn('Fallback artist list failed:', fbErr);
     }
     return [];
   },
@@ -1371,31 +1400,12 @@ export const MusicApiService = {
 
   async getTopArtists(): Promise<any[]> {
     try {
-      const fetchOptions: any = {
-        method: 'POST',
-        headers: { 
-          'Referer': 'http://music.163.com',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: 'limit=12&offset=0&type=1&area=7'
-      };
-      const response = await universalFetch('https://music.163.com/api/artist/list', fetchOptions);
-      if (!response.ok) return [];
-      const data = await response.json();
-      if (data.code !== 200 || !Array.isArray(data.artists)) {
-        throw new Error(`Netease Artists API returned code: ${data.code}`);
+      const list = await this.getArtistList({ area: 7, type: -1, limit: 12 });
+      if (list && list.length > 0) {
+        return list;
       }
-
-      return data.artists.map((artist: any) => ({
-        id: String(artist.id),
-        name: artist.name,
-        picUrl: resolveImageUrl(artist.picUrl, artist.img1v1Url) || '',
-        source: 'netease',
-      }));
     } catch (err: any) {
       console.error('Failed to get top artists:', err);
-      throw err;
     }
     return [];
   },
